@@ -213,11 +213,22 @@ async def checking_visits():
             requester = requesters.get(universe_id)
             if requester:
                 for user_id in requester:
-                    try:
-                        user = await client.fetch_user(user_id)
+                    if "thread" in user_id:
+                        thread = await client.fetch_channel(int(user_id.replace("thread", "")))
+                        if not thread: continue
 
-                        await user.send(f"farmed [{universe.get('name')}](<https://www.roblox.com/games/{universe.get('rootPlaceId')}>)")#, joins requested: {JOINS * RATIO}")
-                    except Exception as e: print(e)
+                        forum: discord.ForumChannel = await client.get_channel(PRIORITY_CHANNEL)
+                        tags = [tag for tag in thread.applied_tags if tag.id != WIP_TAG]
+
+                        tags.append(forum.get_tag(FINISHED_TAG))
+
+                        await thread.edit(applied_tags=tags)
+                    else:
+                        try:
+                            user = await client.fetch_user(user_id)
+
+                            await user.send(f"farmed [{universe.get('name')}](<https://www.roblox.com/games/{universe.get('rootPlaceId')}>)")#, joins requested: {JOINS * RATIO}")
+                        except Exception as e: print(e)
 
                 requesters[universe_id] = None
 
@@ -291,35 +302,42 @@ def whitelist_check(ctx: discord.ApplicationContext):
     
     return False
 
-def create_spreadsheet_container(data):
+def create_spreadsheet_container(header, data, size: int = 10) -> list[ui.Container]:
     if not data: return ui.Container()
 
-    widths = [max(len(str(item)) for item in col) for col in zip(*[row for row in data])]
+    pages = []
+    chunks = [data[i:i + size] for i in range(0, len(data), size)]
+    for chunk in chunks:
+        lines = [header]
+        lines.extend(chunk)
 
-    container_members = []
-    message_limit = 3700
-    current_length = 0
+        widths = [max(len(str(item)) for item in col) for col in zip(*[row for row in lines])]
 
-    header_string = "".join(str(item).ljust(widths[i] + 2) for i, item in enumerate(data[0]))
-    container_members.append(ui.TextDisplay(content=header_string))
-    current_length += len(header_string)
+        container_members = []
+        message_limit = 3700
+        current_length = 0
 
-    for index, line in enumerate(data[1:11], 1):
-        line_string = "".join(str(item).ljust(widths[i] + 2) for i, item in enumerate(line[:-1]))
-        
-        if current_length + len(line_string) > message_limit: break
-        
-        container_members.append(
-            ui.Section(
-                ui.TextDisplay(line_string),
-                accessory=ui.Button(label="🔗", url=line[-1], style=discord.ButtonStyle.link),
+        header_string = "".join(str(item).ljust(widths[i] + 2) for i, item in enumerate(lines[0]))
+        container_members.append(ui.TextDisplay(content=header_string))
+        current_length += len(header_string)
+
+        for index, line in enumerate(lines[1:11], 1):
+            line_string = "".join(str(item).ljust(widths[i] + 2) for i, item in enumerate(line[:-1]))
+            
+            if current_length + len(line_string) > message_limit: break
+            
+            container_members.append(
+                ui.Section(
+                    ui.TextDisplay(line_string),
+                    accessory=ui.Button(label="🔗", url=line[-1], style=discord.ButtonStyle.link),
+                )
             )
-        )
 
-        current_length += len(line_string) + len("Game link")
+            current_length += len(line_string) + len("Game link")
 
-    container = ui.Container(*container_members)
-    return container
+        pages.append(ui.Container(*container_members))
+
+    return pages
 
 class CustomPages(ui.View):
     def __init__(self, pages: list[ui.Container], timeout: int = 200, user: discord.User = None):
@@ -512,13 +530,12 @@ async def purge_queue(ctx: discord.ApplicationContext):
 async def list_queue(ctx: discord.ApplicationContext):
     await ctx.defer()
 
-    data = [["`🔳","# ", "Name", "Visits", "Link   `"]]
+    header = ["`🔳","# ", "Name", "Visits", "Link   `"]
+    data = []
     visits_required = 0
 
-    pages = []
-
     if queue:
-        chunks = [queue[i:i + 10] for i in range(0, len(queue), 10)]
+        chunks = [queue[i:i + 50] for i in range(0, len(queue), 50)]
         botnet = await get_latest(session)
 
         for i_c, chunk in enumerate(chunks):
@@ -533,12 +550,10 @@ async def list_queue(ctx: discord.ApplicationContext):
                 
                 visits_required += max(0, 1000 - universe.get("visits"))
 
-            container = create_spreadsheet_container(data)
-            container.add_text(f"\ngames in queue: `{len(queue)}`\nvisits required: `{visits_required}`\ncurrent online: `{botnet}`")
+    pages = create_spreadsheet_container(header, data)
+    for page in pages:
+        page.add_text(f"\ngames in queue: `{len(queue)}`\nvisits required: `{visits_required}`\ncurrent online: `{botnet}`")
 
-            pages.append(container)
-    
-    if not pages: pages = [create_spreadsheet_container(data)]
     view = CustomPages(pages=pages, user=ctx.author)
     return await ctx.edit(view=view)
 
@@ -595,6 +610,9 @@ async def add_queue_wrap(ctx: discord.ApplicationContext = None, message: discor
                     requester_ids.append(ctx.author.id)
                 if message and message.author.id not in requester_ids:
                     requester_ids.append(message.author.id)
+                if ctx and isinstance(ctx.channel, discord.Thread):
+                    requester_ids.append(f"thread{ctx.channel_id}")
+                
                 requesters[str(place.get("universeId"))] = requester_ids
 
                 data.append(["`✅", game_name, visits, len(queue), "`", game_link])
@@ -602,21 +620,14 @@ async def add_queue_wrap(ctx: discord.ApplicationContext = None, message: discor
         await write_queue()
         await write_requesters()
 
-        pages = []
-        chunks = [data[i:i + 10] for i in range(0, len(data), 10)]
-
-        for chunk in chunks:
-            lines = [header]
-            lines.extend(chunk)
-
-            pages.append(create_spreadsheet_container(lines))
+        pages = create_spreadsheet_container(header, data)
 
         paginator = CustomPages(pages=pages, user=ctx.author if ctx else message.author)
         if ctx: await ctx.edit(view=paginator)
         else: return await message.reply(view=paginator)
     else:
         if ctx: return await ctx.respond("no games found 😔", ephemeral=True, delete_after=3)
-        else: return await message.reply("no games found 😔", delete_after=3)
+        else: return
 
 @client.message_command(name="add to queue")
 async def add_queue(ctx: discord.ApplicationContext, message: discord.Message):
@@ -628,7 +639,7 @@ async def place_info(ctx: discord.ApplicationContext, message: discord.Message):
 
     place_ids = await get_place_ids(message.content)
 
-    header = ["`🔳", "Name", "Visits", "Badges", "Link   `"]
+    header = ["`Name", "Visits", "Badges", "Link   `"]
     data = []
     
     chunks = [place_ids[i:i + 50] for i in range(0, len(place_ids), 50)]
@@ -644,18 +655,12 @@ async def place_info(ctx: discord.ApplicationContext, message: discord.Message):
             badges = await get_badges(session, universe_id)
             legacies = get_legacies(badges)
             
-            return ["`   ", universe.get("name"), universe.get("visits"), f"{len(legacies)}`", f"https://www.roblox.com/games/{universe.get('rootPlaceId')}"]
+            return [f"`{universe.get('name')}", universe.get("visits"), f"{len(legacies)}`", f"https://www.roblox.com/games/{universe.get('rootPlaceId')}"]
 
         results = await asyncio.gather(*[universe_badges(universe) for universe in universes])
         data.extend(results)
 
-    chunks = [data[i:i + 10] for i in range(0, len(data), 10)]
-    pages = []
-    for chunk in chunks:
-        lines = [header]
-        lines.extend(chunk)
-
-        pages.append(create_spreadsheet_container(lines))
+    pages = create_spreadsheet_container(header, data)
 
     paginator = CustomPages(pages=pages, user=ctx.author)
     return await ctx.respond(view=paginator)
@@ -673,40 +678,58 @@ async def on_message(message: discord.Message):
 
         universe_ids = [place.get("universeId") for place in places]
         universes = await get_universes(session, universe_ids)
+        maturities = await asyncio.gather(*[get_universe_maturity(session, universe_id) for universe_id in universe_ids])
 
         spreadsheet = await agc.open_by_key(SPREADSHEET_ID)
         wip_sheet = await spreadsheet.get_worksheet(0)
         done_sheet = await spreadsheet.get_worksheet(1)
 
-        response = await message.reply(f"processing 0/{len(places)}")
+        urls = [f"https://www.roblox.com/games/{place_id}" for place_id in place_ids]
+        wips = await asyncio.gather(*[wip_sheet.find(url) for url in urls])
+        dones = await asyncio.gather(*[done_sheet.find(url) for url in urls])
 
-        for i, universe in enumerate(universes, 0):
-            url = f"https://www.roblox.com/games/{universe.get('rootPlaceId')}"
-
-            visits = universe.get("visits")
-            maturity = await get_universe_maturity(session, universe.get("id"))
-
-            if visits < 1000 and maturity.get("contentMaturity") == "unrated": await message.reply(f"{universe.get('rootPlaceId')}/{universe.get('name')} has not reached 1k visits yet", delete_after=3); continue
-
-            cell = await wip_sheet.find(url)
-            isdonebefore = await done_sheet.find(url)
-            if isdonebefore: await message.reply(f"{universe.get('rootPlaceId')}/{universe.get('name')} is done in spreadsheet already", delete_after=3); continue
-
-            if cell:
-                row_index = cell.row
-
-                row_data = await wip_sheet.row_values(row_index)
-                await done_sheet.append_row(row_data)
-                await wip_sheet.delete_rows(row_index)
-            else:
-                badges = await get_badges(session, universe.get("id"))
-                legacies = get_legacies(badges)
-
-                await done_sheet.append_row([url, universe.get("id"), len(legacies), visits])
-
-            await response.edit(content=f"processing {i}/{len(places)}")
+        header = ["`🔲", "Name", "Note", "Link   `"]
+        data = []
+        cells: gspread.Cell = []
+        dups: gspread.Cell = []
+        deleting = True
         
+        for i, universe in enumerate(universes, 0):
+            universe_id = universe.get("id")
+            place_id = universe.get("rootPlaceId")
+
+            url = urls[i] #f"https://www.roblox.com/games/{place_id}"
+
+            name = universe.get("name")
+            visits = universe.get("visits")
+            maturity = maturities[i]
+
+            cell = wips[i]
+            isdonebefore = dones[i]
+
+            if visits < 1000 and maturity.get("contentMaturity") == "unrated": data.append(["`❌", name, "<1k visits`", url]); continue
+            if isdonebefore and not cell: data.append(["`❌", name, "in table`", url]); continue
+            if not cell: data.append(["`⚠", name, "not in table`", url]); deleting = False; continue
+            if cell and isdonebefore: dups.append(cell); continue
+
+            cells.append(cell)
+            data.append(["`✅", name, "`", url])
+        
+        async def move_cell(cell: gspread.Cell):
+            row_index = cell.row
+
+            row_data = await wip_sheet.row_values(row_index)
+            await done_sheet.append_row(row_data)
+            await wip_sheet.delete_rows(row_index)
+
+        await asyncio.gather(*[move_cell(cell) for cell in cells])
+        await asyncio.gather(*[wip_sheet.delete_rows(dupe.row) for dupe in dups])
+
+        pages = create_spreadsheet_container(header, data)
+        
+        paginator = CustomPages(pages)
+        
+        await message.reply(content=f"{message.author.mention}", view=paginator, delete_after=20 if deleting else None)
         await message.delete(reason=f"moved to spreadsheet")
-        await response.delete()
 
 client.run(BOT_TOKEN)
