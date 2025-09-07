@@ -630,7 +630,7 @@ async def place_info(ctx: discord.ApplicationContext, message: discord.Message):
             badges = await get_badges(session, universe_id)
             legacies = get_legacies(badges)
             
-            return ["   ", universe.get("name"), universe.get("visits"), len(legacies), f"https://www.roblox.com/games/{universe.get('rootPlaceId')}"]
+            return ["`   ", universe.get("name"), universe.get("visits"), len(legacies)+"`", f"https://www.roblox.com/games/{universe.get('rootPlaceId')}"]
 
         results = await asyncio.gather(*[universe_badges(universe) for universe in universes])
         data.extend(results)
