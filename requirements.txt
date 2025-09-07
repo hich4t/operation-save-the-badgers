@@ -1,0 +1,7 @@
+git+https://github.com/Pycord-Development/pycord
+requests
+aiofiles
+psutil
+gspread-asyncio 
+gspread 
+google-auth

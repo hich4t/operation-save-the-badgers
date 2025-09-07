@@ -1,0 +1,6 @@
+__pycache__
+temp
+.env
+queue.csv
+requesters.json
+credentials.json
