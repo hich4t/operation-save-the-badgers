@@ -303,7 +303,7 @@ def whitelist_check(ctx: discord.ApplicationContext):
     return False
 
 def create_spreadsheet_container(header, data, size: int = 10) -> list[ui.Container]:
-    if not data: return ui.Container()
+    if not data: return [ui.Container(ui.TextDisplay(content="No data provided."))]
 
     pages = []
     chunks = [data[i:i + size] for i in range(0, len(data), size)]
@@ -729,7 +729,7 @@ async def on_message(message: discord.Message):
         
         paginator = CustomPages(pages)
         
-        await message.reply(content=f"{message.author.mention}", view=paginator, delete_after=20 if deleting else None)
+        await message.reply(view=paginator, delete_after=20 if deleting else None)
         await message.delete(reason=f"moved to spreadsheet")
 
 client.run(BOT_TOKEN)
