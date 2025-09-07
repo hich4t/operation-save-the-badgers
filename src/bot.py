@@ -662,7 +662,7 @@ async def place_info(ctx: discord.ApplicationContext, message: discord.Message):
 
 @client.event
 async def on_message(message: discord.Message):
-    if message.channel.id == PRIORITY_CHANNEL: 
+    if (isinstance(message.channel, discord.TextChannel) and message.channel.id == PRIORITY_CHANNEL) or (isinstance(message.channel, discord.Thread) and message.channel.parent_id == PRIORITY_CHANNEL):
         if message.author.id == client.user.id: return
         return await add_queue_wrap(message=message)
     elif message.channel.id == SAVED_CHANNEL:
