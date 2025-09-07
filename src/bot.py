@@ -73,6 +73,15 @@ async def get_universe_playability(session: aiohttp.ClientSession, universes: li
     response = await request.json()
     return response
 
+async def get_universe_maturity(session: aiohttp.ClientSession, universe_id):
+    request = await session.post(
+        "https://apis.roblox.com/experience-guidelines-api/experience-guidelines/get-age-recommendation",
+        json={"universeId": str(universe_id)}    
+    )
+    request.raise_for_status()
+    response = await request.json()
+    return response.get("ageRecommendationDetails").get("summary").get("ageRecommendation")
+
 async def get_places(session: aiohttp.ClientSession, places: list):
     params = "&".join([f"placeIds={place}" for place in places])
     request = await session.get(f"https://games.roblox.com/v1/games/multiget-place-details?{params}")
@@ -189,8 +198,10 @@ async def checking_visits():
         universe = universes[0]
         universe_id = str(queue[0][1])
         place_id = str(queue[0][0])
+        
+        maturity = await get_universe_maturity(session, universe_id)
 
-        if universe.get("visits") > 1000:
+        if universe.get("visits") > 1000 or maturity.get("contentMaturity") != "unrated":
             queue.pop(0)
 
             await write_queue()
@@ -552,7 +563,8 @@ async def add_queue_wrap(ctx: discord.ApplicationContext = None, message: discor
 
             universes = await get_universes(session, universe_ids)
             playabilities = await get_universe_playability(session, universe_ids)
-            
+            maturities = await asyncio.gather(*[get_universe_maturity(session, universe_id) for universe_id in universe_ids])
+
             for i in range(len(places)):
                 place = places[i]
                 place_id = str(place.get("placeId"))
@@ -561,6 +573,7 @@ async def add_queue_wrap(ctx: discord.ApplicationContext = None, message: discor
                 universe_id = str(place.get("universeId"))
                 
                 playability = playabilities[i]
+                maturity = maturities[i]
                 
                 game_name = place.get('name')[:23]
                 visits = universe.get("visits")
@@ -573,6 +586,7 @@ async def add_queue_wrap(ctx: discord.ApplicationContext = None, message: discor
                 game = (place_id, universe_id)
 
                 if game in queue: data.append(["`❌", game_name, visits, "", "already in q`", game_link]); continue
+                if maturity.get("contentMaturity") != "unrated": data.append(["`❌", game_name, visits, "", "already rated`", game_link]); continue
 
                 queue.append(game)
 
