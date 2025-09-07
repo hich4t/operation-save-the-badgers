@@ -60,6 +60,9 @@ ROLE_ID = 0
 SAVED_CHANNEL = 0
 # Discord Priority Channel
 PRIORITY_CHANNEL = 0
+# Forum Tags
+FINISHED_TAG = 0
+WIP_TAG = 0
 
 #               .-')     _ (`-.  _  .-')     ('-.   ('-.     _ .-') _   
 #              ( OO ).  ( (OO  )( \( -O )  _(  OO) ( OO ).-.( (  OO) )  
