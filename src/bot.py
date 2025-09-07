@@ -684,7 +684,9 @@ async def on_message(message: discord.Message):
             url = f"https://www.roblox.com/games/{universe.get('rootPlaceId')}"
 
             visits = universe.get("visits")
-            if visits < 1000: await message.reply(f"{universe.get('rootPlaceId')}/{universe.get('name')} has not reached 1k visits yet", delete_after=3); continue
+            maturity = await get_universe_maturity(session, universe.get("id"))
+
+            if visits < 1000 and maturity.get("contentMaturity") == "unrated": await message.reply(f"{universe.get('rootPlaceId')}/{universe.get('name')} has not reached 1k visits yet", delete_after=3); continue
 
             cell = await wip_sheet.find(url)
             isdonebefore = await done_sheet.find(url)
