@@ -534,15 +534,15 @@ async def list_queue(ctx: discord.ApplicationContext):
     data = []
     visits_required = 0
 
+    botnet = await get_latest(session)
     if queue:
         chunks = [queue[i:i + 50] for i in range(0, len(queue), 50)]
-        botnet = await get_latest(session)
 
         for i_c, chunk in enumerate(chunks):
             universe_ids = [game[1] for game in chunk]
             universes = await get_universes(session, universe_ids)
             
-            data = [["`🔳","# ", "Name", "Visits", "Link   `"]]
+            data = []
             visits_required = 0
 
             for i, universe in enumerate(universes, 1):
