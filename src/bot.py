@@ -177,7 +177,7 @@ async def checking_visits():
             spreadsheet = await agc.open_by_key(SPREADSHEET_ID)
             wip_sheet = await spreadsheet.get_worksheet(0)
             row = await wip_sheet.get(f'A20:E20')
-            
+
             row = row[0]
             place_id = str(row[0].split("/")[-1])
             universe_id = str(row[1])
@@ -674,7 +674,7 @@ async def on_message(message: discord.Message):
 
             cell = await wip_sheet.find(url)
             isdonebefore = await done_sheet.find(url)
-            if isdonebefore: await message.reply(f"{universe.get('rootPlaceId')}/{universe.get('name')} meow", delete_after=3); continue
+            if isdonebefore: await message.reply(f"{universe.get('rootPlaceId')}/{universe.get('name')} is done in spreadsheet already", delete_after=3); continue
 
             if cell:
                 row_index = cell.row
