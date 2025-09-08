@@ -10,16 +10,16 @@ def killprocess(name):
             try: proc.terminate()
             except: pass
 
-def launch(index: int):
+def launch(roblox_index: int, ps_index):
     while True:
-        webbrowser.open(f"roblox-uwp{index}://navigation/share_links?{PRIVATE_SERVERS[index-1]}")
-        time.sleep(8)
+        webbrowser.open(f"roblox-uwp{roblox_index}://navigation/share_links?{PRIVATE_SERVERS[ps_index]}")
+        time.sleep(DELAY)
 
 def joiner():
     threads = []
 
-    for i in range(START_INDEX, END_INDEX):
-        thread = threading.Thread(target=launch, args=(i,))
+    for ps_index, roblox_index in enumerate(range(START_INDEX, END_INDEX+1)):
+        thread = threading.Thread(target=launch, args=(roblox_index, ps_index,))
         threads.append(thread)
         thread.start()
 
