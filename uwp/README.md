@@ -13,7 +13,7 @@ Collection of useful scripts and macros.
         └── uwpsingle.py
 ```
 
-![[Download](https://img.shields.io/badge/DOWNLOAD-0077B6?style=for-the-badge&labelColor=black&color=0077B6&logo=github&logoColor=white)](https://github.com/hich4t/operation-save-the-badgers/releases/latest)
+[![Download](https://img.shields.io/badge/DOWNLOAD-0077B6?style=for-the-badge&labelColor=black&color=0077B6&logo=github&logoColor=white)](https://github.com/hich4t/operation-save-the-badgers/releases/latest)
 
 ## [cfg.py](/cfg.py)
 Configuration for [`uwplauncher.py`](#uwplauncherpy) and [`uwpsingle.py`](#uwpsinglepy)
