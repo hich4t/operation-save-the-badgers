@@ -1,7 +1,7 @@
 <roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
 	<External>null</External>
 	<External>nil</External>
-	<Item class="Workspace" referent="RBXEBDF35341EC64EA3B8F4F068219FA1A9">
+	<Item class="Workspace" referent="RBX5EB6006EE53842068587F67867675695">
 		<Properties>
 			<float name="AirDensity">0.00120000006</float>
 			<float name="AirTurbulenceIntensity">0</float>
@@ -12,7 +12,7 @@
 			<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
 			<token name="ClientAnimatorThrottling">0</token>
 			<BinaryString name="CollisionGroupData">AQEABP////8HRGVmYXVsdA==</BinaryString>
-			<Ref name="CurrentCamera">RBXE826825C9FA94724A0F681A2F72BEC46</Ref>
+			<Ref name="CurrentCamera">RBXC0D914F29BCA4829B020C2399A9F5F8E</Ref>
 			<bool name="DefinesCapabilities">false</bool>
 			<double name="DistributedGameTime">0</double>
 			<bool name="ExplicitAutoJoints">true</bool>
@@ -98,7 +98,7 @@
 				</CFrame>
 			</OptionalCoordinateFrame>
 		</Properties>
-		<Item class="Camera" referent="RBXE826825C9FA94724A0F681A2F72BEC46">
+		<Item class="Camera" referent="RBXC0D914F29BCA4829B020C2399A9F5F8E">
 			<Properties>
 				<BinaryString name="AttributesSerialize"></BinaryString>
 				<CoordinateFrame name="CFrame">
@@ -145,7 +145,7 @@
 				<bool name="VRTiltAndRollEnabled">false</bool>
 			</Properties>
 		</Item>
-		<Item class="Part" referent="RBX780B4AE6F5C3419BA9355D7E11704043">
+		<Item class="Part" referent="RBX763D4EAEE26544E798CB5B6D1DFF5375">
 			<Properties>
 				<bool name="Anchored">true</bool>
 				<BinaryString name="AttributesSerialize"></BinaryString>
@@ -246,7 +246,7 @@
 				</Vector3>
 			</Properties>
 		</Item>
-		<Item class="Terrain" referent="RBXB497CBC001824ACAAFAF826BB2BB12CA">
+		<Item class="Terrain" referent="RBX1E0405871E0C4EA893DB51B15A678C3D">
 			<Properties>
 				<token name="AcquisitionMethod">0</token>
 				<bool name="Anchored">true</bool>
@@ -362,7 +362,7 @@ zNLfaoZA///+//PAj5CH]]></BinaryString>
 				</Vector3>
 			</Properties>
 		</Item>
-		<Item class="SpawnLocation" referent="RBX40DD34D555E4450BA892734C0F5AF14A">
+		<Item class="SpawnLocation" referent="RBX6EA74751EDF046DCBFC9884FE7C5FCEE">
 			<Properties>
 				<bool name="AllowTeamChangeOnTouch">false</bool>
 				<bool name="Anchored">true</bool>
@@ -468,7 +468,7 @@ zNLfaoZA///+//PAj5CH]]></BinaryString>
 				</Vector3>
 			</Properties>
 		</Item>
-		<Item class="Script" referent="RBXB69569F481BA4900A84AC8217D84CB14">
+		<Item class="Script" referent="RBX4200A707B0894AA8B1C7FEBF8DAC4BD6">
 			<Properties>
 				<BinaryString name="AttributesSerialize"></BinaryString>
 				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
@@ -480,6 +480,7 @@ zNLfaoZA///+//PAj5CH]]></BinaryString>
 				<token name="RunContext">0</token>
 				<string name="ScriptGuid">{389A3BAA-A94C-451A-9DB6-429F236C82F7}</string>
 				<ProtectedString name="Source"><![CDATA[local players = game:GetService("Players")
+local httpService = game:GetService("HttpService")
 local teleportService = game:GetService("TeleportService")
 local datastoreService = game:GetService("DataStoreService")
 local messagingService = game:GetService("MessagingService")
@@ -488,30 +489,31 @@ local datastore = datastoreService:GetDataStore("placeId")
 local timestamps = datastoreService:GetOrderedDataStore("lastJoined")
 
 local success, message = pcall(function() return datastore:GetAsync("placeId") end)
-local placeId = 1818 if success then placeId = message end
+local placeIds = {1818} if success then placeIds = httpService:JSONDecode(message) end
 
-local function onPlaceId(data) placeId = tonumber(data.Data) end
-
+local function onPlaceId(data) placeIds = httpService:JSONDecode(data.Data) end
 messagingService:SubscribeAsync("placeId", onPlaceId)
 
 repeat task.wait(.01) until #players:GetChildren() ~= 0
 
-local player = players:GetChildren()[1]
-if game.PrivateServerId == "" then player:Kick("meow meow") end
+local function handle_join(player: Player)
+	local userId = player.UserId
 
-local userId = player.UserId
+	task.spawn(function() timestamps:SetAsync(tostring(userId), os.time()) end)
+	local success, message = pcall(function() return teleportService:Teleport(tonumber(placeIds[math.random(1, #placeIds)]), player) end)
 
-local success, message = pcall(function() return teleportService:Teleport(tonumber(placeId), player) end)
+	if not success then player:Kick(message) error(message) end
+end
 
-if not success then player:Kick(message) error(message) 
-else task.spawn(function() timestamps:SetAsync(tostring(userId), os.time()) end) end]]></ProtectedString>
+for _,player in players:GetChildren() do handle_join(player) end
+players.PlayerAdded:Connect(function(player: Player) handle_join(player) end)]]></ProtectedString>
 				<int64 name="SourceAssetId">-1</int64>
 				<BinaryString name="Tags"></BinaryString>
 				<UniqueId name="UniqueId">2325e5c2ae63c96904fa155b00003ac5</UniqueId>
 			</Properties>
 		</Item>
 	</Item>
-	<Item class="TimerService" referent="RBX91BACD1F2C3D4F3BB289B7EAE4BE7595">
+	<Item class="TimerService" referent="RBX5311B3245DFF4B6288C82F3942D79383">
 		<Properties>
 			<BinaryString name="AttributesSerialize"></BinaryString>
 			<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
@@ -523,7 +525,7 @@ else task.spawn(function() timestamps:SetAsync(tostring(userId), os.time()) end)
 			<UniqueId name="UniqueId">44b188dace632b4702e9c68d00483062</UniqueId>
 		</Properties>
 	</Item>
-	<Item class="SoundService" referent="RBX471EFFADC0E74ABDBE1EB880DFDB9CC8">
+	<Item class="SoundService" referent="RBXFB9E0259F8D84A9D9E132C967A46B2CA">
 		<Properties>
 			<token name="AmbientReverb">0</token>
 			<BinaryString name="AttributesSerialize"></BinaryString>
@@ -546,7 +548,7 @@ else task.spawn(function() timestamps:SetAsync(tostring(userId), os.time()) end)
 			<token name="VolumetricAudio">1</token>
 		</Properties>
 	</Item>
-	<Item class="VideoCaptureService" referent="RBX9AEB45F6EB6E4EC19D9B0E87FF02FFF3">
+	<Item class="VideoCaptureService" referent="RBX5E2F865A41CF42BBBBCE8E6D1DF758E7">
 		<Properties>
 			<BinaryString name="AttributesSerialize"></BinaryString>
 			<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
@@ -558,7 +560,7 @@ else task.spawn(function() timestamps:SetAsync(tostring(userId), os.time()) end)
 			<UniqueId name="UniqueId">703758be6d891a7e0494fe45000002f5</UniqueId>
 		</Properties>
 	</Item>
-	<Item class="NonReplicatedCSGDictionaryService" referent="RBX2EA9C77DAD4548BA84785F2B8C4C9EFD">
+	<Item class="NonReplicatedCSGDictionaryService" referent="RBX978FA864452B46D8A7D8F8C6A9E4ED9B">
 		<Properties>
 			<BinaryString name="AttributesSerialize"></BinaryString>
 			<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
@@ -570,7 +572,7 @@ else task.spawn(function() timestamps:SetAsync(tostring(userId), os.time()) end)
 			<UniqueId name="UniqueId">44b188dace632b4702e9c68d0048305b</UniqueId>
 		</Properties>
 	</Item>
-	<Item class="CSGDictionaryService" referent="RBX21D03DBDDC1C4E1F89B7EB08C85F4FBF">
+	<Item class="CSGDictionaryService" referent="RBX4CC8EA45C2D7475F8CFE665B703B08BA">
 		<Properties>
 			<BinaryString name="AttributesSerialize"></BinaryString>
 			<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
@@ -582,7 +584,7 @@ else task.spawn(function() timestamps:SetAsync(tostring(userId), os.time()) end)
 			<UniqueId name="UniqueId">44b188dace632b4702e9c68d0048305c</UniqueId>
 		</Properties>
 	</Item>
-	<Item class="Chat" referent="RBX05CFE6DA8E5A45718684022EC0694EBE">
+	<Item class="Chat" referent="RBX1C53745BA5524E64AD4CC3F2582BFF7D">
 		<Properties>
 			<BinaryString name="AttributesSerialize"></BinaryString>
 			<bool name="BubbleChatEnabled">true</bool>
@@ -597,7 +599,7 @@ else task.spawn(function() timestamps:SetAsync(tostring(userId), os.time()) end)
 			<UniqueId name="UniqueId">44b188dace632b4702e9c68d00483061</UniqueId>
 		</Properties>
 	</Item>
-	<Item class="Players" referent="RBXB5B089F0AF6940A29B372501D70BA087">
+	<Item class="Players" referent="RBX83A5068B65434C9B9EE1C4E7F1078DE6">
 		<Properties>
 			<BinaryString name="AttributesSerialize"></BinaryString>
 			<bool name="BanningEnabled">true</bool>
@@ -615,7 +617,7 @@ else task.spawn(function() timestamps:SetAsync(tostring(userId), os.time()) end)
 			<bool name="UseStrafingAnimations">false</bool>
 		</Properties>
 	</Item>
-	<Item class="ReplicatedFirst" referent="RBX37CEBBB0639444539D87165A205315F3">
+	<Item class="ReplicatedFirst" referent="RBX158FE8E6AFDE4E4AB5A4086E5D9B1C79">
 		<Properties>
 			<BinaryString name="AttributesSerialize"></BinaryString>
 			<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
@@ -627,7 +629,7 @@ else task.spawn(function() timestamps:SetAsync(tostring(userId), os.time()) end)
 			<UniqueId name="UniqueId">44b188dace632b4702e9c68d00483068</UniqueId>
 		</Properties>
 	</Item>
-	<Item class="TweenService" referent="RBXD4BC8CCEEAC941E78A0899170C708D75">
+	<Item class="TweenService" referent="RBX269FA1D90D314167BAAF45E34D76BFA6">
 		<Properties>
 			<BinaryString name="AttributesSerialize"></BinaryString>
 			<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
@@ -639,7 +641,7 @@ else task.spawn(function() timestamps:SetAsync(tostring(userId), os.time()) end)
 			<UniqueId name="UniqueId">44b188dace632b4702e9c68d0048306a</UniqueId>
 		</Properties>
 	</Item>
-	<Item class="MaterialService" referent="RBX9F9C50877D1D4452982A3472DB2F9301">
+	<Item class="MaterialService" referent="RBX0848EE1F4F3E48778F65736A14BEBB13">
 		<Properties>
 			<string name="AsphaltName">Asphalt</string>
 			<BinaryString name="AttributesSerialize"></BinaryString>
@@ -692,7 +694,7 @@ else task.spawn(function() timestamps:SetAsync(tostring(userId), os.time()) end)
 			<string name="WoodPlanksName">WoodPlanks</string>
 		</Properties>
 	</Item>
-	<Item class="TextChatService" referent="RBX4C3E39FB31414586A7F26E46956FE4EA">
+	<Item class="TextChatService" referent="RBX84C6B6B1232F4F0C95252EA269912BAD">
 		<Properties>
 			<BinaryString name="AttributesSerialize"></BinaryString>
 			<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
@@ -710,7 +712,7 @@ else task.spawn(function() timestamps:SetAsync(tostring(userId), os.time()) end)
 			<BinaryString name="Tags"></BinaryString>
 			<UniqueId name="UniqueId">437be0dc443b94cc04190c7f00000302</UniqueId>
 		</Properties>
-		<Item class="ChatWindowConfiguration" referent="RBXE7E09231B98A440EAEEDB873346F211A">
+		<Item class="ChatWindowConfiguration" referent="RBX4D3E918C32B24E778CD5DBB3777964D5">
 			<Properties>
 				<BinaryString name="AttributesSerialize"></BinaryString>
 				<Color3 name="BackgroundColor3">
@@ -751,7 +753,7 @@ else task.spawn(function() timestamps:SetAsync(tostring(userId), os.time()) end)
 				<float name="WidthScale">1</float>
 			</Properties>
 		</Item>
-		<Item class="ChatInputBarConfiguration" referent="RBX283AF889DB034E78853AB49496173ED5">
+		<Item class="ChatInputBarConfiguration" referent="RBXFC0D316AEFB14FEE80038E3EDE80355A">
 			<Properties>
 				<BinaryString name="AttributesSerialize"></BinaryString>
 				<bool name="AutocompleteEnabled">true</bool>
@@ -796,7 +798,7 @@ else task.spawn(function() timestamps:SetAsync(tostring(userId), os.time()) end)
 				<UniqueId name="UniqueId">437be0dc443b94cc04190c7f00003067</UniqueId>
 			</Properties>
 		</Item>
-		<Item class="BubbleChatConfiguration" referent="RBX5B633A59CB6042EA9A6B4EE5B421208D">
+		<Item class="BubbleChatConfiguration" referent="RBX1EE2F266708B490EA1AE8E4E73F6208F">
 			<Properties>
 				<string name="AdorneeName">HumanoidRootPart</string>
 				<BinaryString name="AttributesSerialize"></BinaryString>
@@ -840,7 +842,7 @@ else task.spawn(function() timestamps:SetAsync(tostring(userId), os.time()) end)
 				<UniqueId name="UniqueId">437be0dc443b94cc04190c7f00003068</UniqueId>
 				<float name="VerticalStudsOffset">0</float>
 			</Properties>
-			<Item class="UIGradient" referent="RBX3C4CD8026E2E484988E94853CC555608">
+			<Item class="UIGradient" referent="RBX632EBFD7DA924C39B58A75AB3A11E4D9">
 				<Properties>
 					<BinaryString name="AttributesSerialize"></BinaryString>
 					<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
@@ -860,7 +862,7 @@ else task.spawn(function() timestamps:SetAsync(tostring(userId), os.time()) end)
 					<UniqueId name="UniqueId">703758be6d891a7e0494fe45000034dd</UniqueId>
 				</Properties>
 			</Item>
-			<Item class="ImageLabel" referent="RBX60FF3FF74C694561B92EE316A78DEE33">
+			<Item class="ImageLabel" referent="RBX1248167E813C43FD9C4C5321C47AD936">
 				<Properties>
 					<bool name="Active">false</bool>
 					<Vector2 name="AnchorPoint">
@@ -959,7 +961,7 @@ else task.spawn(function() timestamps:SetAsync(tostring(userId), os.time()) end)
 					<int name="ZIndex">1</int>
 				</Properties>
 			</Item>
-			<Item class="UICorner" referent="RBX4344E7CAB1D64119847C98DDFC646CEE">
+			<Item class="UICorner" referent="RBX8997386834E44D55B1CC1EB3E977EDE7">
 				<Properties>
 					<BinaryString name="AttributesSerialize"></BinaryString>
 					<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
@@ -975,7 +977,7 @@ else task.spawn(function() timestamps:SetAsync(tostring(userId), os.time()) end)
 					<UniqueId name="UniqueId">703758be6d891a7e0494fe45000034df</UniqueId>
 				</Properties>
 			</Item>
-			<Item class="UIPadding" referent="RBX5E2E502EFEBD4011BFCAB233DA03828C">
+			<Item class="UIPadding" referent="RBXF34A866AC88D4FA6937DCB0617F7975A">
 				<Properties>
 					<BinaryString name="AttributesSerialize"></BinaryString>
 					<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
@@ -1004,7 +1006,7 @@ else task.spawn(function() timestamps:SetAsync(tostring(userId), os.time()) end)
 				</Properties>
 			</Item>
 		</Item>
-		<Item class="ChannelTabsConfiguration" referent="RBXEDDEE089EA0944808A045AF3DDC8C448">
+		<Item class="ChannelTabsConfiguration" referent="RBX717B7C9556DB49A1ACD50F3F1AF65127">
 			<Properties>
 				<BinaryString name="AttributesSerialize"></BinaryString>
 				<Color3 name="BackgroundColor3">
@@ -1052,7 +1054,7 @@ else task.spawn(function() timestamps:SetAsync(tostring(userId), os.time()) end)
 			</Properties>
 		</Item>
 	</Item>
-	<Item class="PermissionsService" referent="RBX07B0733E3DDC4A3182D5B601E17AA173">
+	<Item class="PermissionsService" referent="RBX81663F5643D44D579471FD407A6106D7">
 		<Properties>
 			<BinaryString name="AttributesSerialize"></BinaryString>
 			<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
@@ -1064,7 +1066,7 @@ else task.spawn(function() timestamps:SetAsync(tostring(userId), os.time()) end)
 			<UniqueId name="UniqueId">44b188dace632b4702e9c68d0048306f</UniqueId>
 		</Properties>
 	</Item>
-	<Item class="PlayerEmulatorService" referent="RBX39B709FA26164F658D2D8D3238A290A4">
+	<Item class="PlayerEmulatorService" referent="RBX9F67A6E02596471182610E56B473BBEC">
 		<Properties>
 			<BinaryString name="AttributesSerialize"></BinaryString>
 			<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
@@ -1083,7 +1085,7 @@ else task.spawn(function() timestamps:SetAsync(tostring(userId), os.time()) end)
 			<UniqueId name="UniqueId">44b188dace632b4702e9c68d00483071</UniqueId>
 		</Properties>
 	</Item>
-	<Item class="StudioData" referent="RBX3D24BC2EE8B6444CBAAE64017F51790E">
+	<Item class="StudioData" referent="RBX7FD9B33A9E224A03B2D8036376E09354">
 		<Properties>
 			<BinaryString name="AttributesSerialize"></BinaryString>
 			<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
@@ -1096,7 +1098,7 @@ else task.spawn(function() timestamps:SetAsync(tostring(userId), os.time()) end)
 			<UniqueId name="UniqueId">44b188dace632b4702e9c68d00483074</UniqueId>
 		</Properties>
 	</Item>
-	<Item class="StarterPlayer" referent="RBXDFAFCA2BE90245818EBE92134D7D8D45">
+	<Item class="StarterPlayer" referent="RBX95561596BB1146E482B6900C7E7B2FF4">
 		<Properties>
 			<bool name="AllowCustomAnimations">true</bool>
 			<BinaryString name="AttributesSerialize"></BinaryString>
@@ -1150,7 +1152,7 @@ else task.spawn(function() timestamps:SetAsync(tostring(userId), os.time()) end)
 			<UniqueId name="UniqueId">44b188dace632b4702e9c68d00483075</UniqueId>
 			<bool name="UserEmotesEnabled">true</bool>
 		</Properties>
-		<Item class="StarterPlayerScripts" referent="RBX6AC1FDB7768342FDBE1102447D758DEF">
+		<Item class="StarterPlayerScripts" referent="RBX0A0FED27D9A14E9FA7FBAFE5C59BEB44">
 			<Properties>
 				<BinaryString name="AttributesSerialize"></BinaryString>
 				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
@@ -1162,7 +1164,7 @@ else task.spawn(function() timestamps:SetAsync(tostring(userId), os.time()) end)
 				<UniqueId name="UniqueId">44b188dace632b4702e9c68d00483201</UniqueId>
 			</Properties>
 		</Item>
-		<Item class="StarterCharacterScripts" referent="RBX2DCD99EAB8694FEC8CE46DC86C5FAB88">
+		<Item class="StarterCharacterScripts" referent="RBX21B15F9F860044ABA2C49EE0F6ECC735">
 			<Properties>
 				<BinaryString name="AttributesSerialize"></BinaryString>
 				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
@@ -1175,7 +1177,7 @@ else task.spawn(function() timestamps:SetAsync(tostring(userId), os.time()) end)
 			</Properties>
 		</Item>
 	</Item>
-	<Item class="StarterPack" referent="RBX451F0D3224564090B521D84B4A286F85">
+	<Item class="StarterPack" referent="RBXF8486CC5E7CF45B6B1E37B43C6A4F9C5">
 		<Properties>
 			<BinaryString name="AttributesSerialize"></BinaryString>
 			<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
@@ -1187,7 +1189,7 @@ else task.spawn(function() timestamps:SetAsync(tostring(userId), os.time()) end)
 			<UniqueId name="UniqueId">44b188dace632b4702e9c68d00483076</UniqueId>
 		</Properties>
 	</Item>
-	<Item class="StarterGui" referent="RBX9182CBB9826E4C699A99D145E9EB11B6">
+	<Item class="StarterGui" referent="RBXC394168AF90C4D76B516A51CB3509404">
 		<Properties>
 			<BinaryString name="AttributesSerialize"></BinaryString>
 			<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
@@ -1206,7 +1208,7 @@ else task.spawn(function() timestamps:SetAsync(tostring(userId), os.time()) end)
 			<token name="VirtualCursorMode">0</token>
 		</Properties>
 	</Item>
-	<Item class="LocalizationService" referent="RBX8C6E092F3AB94E0F9DE3976863EB3EDF">
+	<Item class="LocalizationService" referent="RBXD28A0DC77401429A89F2EC35ACB0EB75">
 		<Properties>
 			<BinaryString name="AttributesSerialize"></BinaryString>
 			<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
@@ -1218,7 +1220,7 @@ else task.spawn(function() timestamps:SetAsync(tostring(userId), os.time()) end)
 			<UniqueId name="UniqueId">44b188dace632b4702e9c68d00483079</UniqueId>
 		</Properties>
 	</Item>
-	<Item class="TeleportService" referent="RBX68DFA919FC7642FA83E40378EA30EF66">
+	<Item class="TeleportService" referent="RBXE210F3C17678451F89CA4F675A7F70E0">
 		<Properties>
 			<BinaryString name="AttributesSerialize"></BinaryString>
 			<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
@@ -1230,7 +1232,7 @@ else task.spawn(function() timestamps:SetAsync(tostring(userId), os.time()) end)
 			<UniqueId name="UniqueId">44b188dace632b4702e9c68d0048307d</UniqueId>
 		</Properties>
 	</Item>
-	<Item class="CollectionService" referent="RBX3A52297FCFE84B1995A90CA21D610C30">
+	<Item class="CollectionService" referent="RBX3AD21CB19B3344F7A812E8587A7C31B2">
 		<Properties>
 			<BinaryString name="AttributesSerialize"></BinaryString>
 			<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
@@ -1242,7 +1244,7 @@ else task.spawn(function() timestamps:SetAsync(tostring(userId), os.time()) end)
 			<UniqueId name="UniqueId">44b188dace632b4702e9c68d0048307f</UniqueId>
 		</Properties>
 	</Item>
-	<Item class="PhysicsService" referent="RBX6788268CBB214F2BA1064D251B1810B1">
+	<Item class="PhysicsService" referent="RBXC86D5E760C3D4E8CB726BF044ADD65BB">
 		<Properties>
 			<BinaryString name="AttributesSerialize"></BinaryString>
 			<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
@@ -1254,7 +1256,7 @@ else task.spawn(function() timestamps:SetAsync(tostring(userId), os.time()) end)
 			<UniqueId name="UniqueId">44b188dace632b4702e9c68d00483080</UniqueId>
 		</Properties>
 	</Item>
-	<Item class="InsertService" referent="RBXA98D5B6F4AEB417BACD86809F82C3F58">
+	<Item class="InsertService" referent="RBX334A73CAC31A40CFA38CC2D674B58322">
 		<Properties>
 			<bool name="AllowClientInsertModels">false</bool>
 			<bool name="AllowInsertFreeModels">false</bool>
@@ -1267,7 +1269,7 @@ else task.spawn(function() timestamps:SetAsync(tostring(userId), os.time()) end)
 			<BinaryString name="Tags"></BinaryString>
 			<UniqueId name="UniqueId">44b188dace632b4702e9c68d00483084</UniqueId>
 		</Properties>
-		<Item class="StringValue" referent="RBXAB398FD4D7EA457CAF1E4271B4B838A8">
+		<Item class="StringValue" referent="RBXC844F08498D34937AC9FE36BF5FD84CC">
 			<Properties>
 				<BinaryString name="AttributesSerialize"></BinaryString>
 				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
@@ -1281,7 +1283,7 @@ else task.spawn(function() timestamps:SetAsync(tostring(userId), os.time()) end)
 			</Properties>
 		</Item>
 	</Item>
-	<Item class="GamePassService" referent="RBXB293A49E9B8C41C1A7C1AEE6D5CAB85F">
+	<Item class="GamePassService" referent="RBXBACAFEA6A2FB4EC9894D719DCCFE31FB">
 		<Properties>
 			<BinaryString name="AttributesSerialize"></BinaryString>
 			<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
@@ -1293,7 +1295,7 @@ else task.spawn(function() timestamps:SetAsync(tostring(userId), os.time()) end)
 			<UniqueId name="UniqueId">44b188dace632b4702e9c68d00483085</UniqueId>
 		</Properties>
 	</Item>
-	<Item class="Debris" referent="RBX5F889A8070E64AB3A7BB4926E1776C80">
+	<Item class="Debris" referent="RBXE0803BC1AF0C48B59E717AC5276A4B05">
 		<Properties>
 			<BinaryString name="AttributesSerialize"></BinaryString>
 			<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
@@ -1306,7 +1308,7 @@ else task.spawn(function() timestamps:SetAsync(tostring(userId), os.time()) end)
 			<UniqueId name="UniqueId">44b188dace632b4702e9c68d00483086</UniqueId>
 		</Properties>
 	</Item>
-	<Item class="CookiesService" referent="RBX24A3FE09A11440EAADCA0BBBB9E6526C">
+	<Item class="CookiesService" referent="RBX4CE21B121ABB4192A452934A1A218E2F">
 		<Properties>
 			<BinaryString name="AttributesSerialize"></BinaryString>
 			<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
@@ -1318,7 +1320,7 @@ else task.spawn(function() timestamps:SetAsync(tostring(userId), os.time()) end)
 			<UniqueId name="UniqueId">44b188dace632b4702e9c68d00483087</UniqueId>
 		</Properties>
 	</Item>
-	<Item class="Selection" referent="RBXC2CCCD8CB8014AB2927F5E8E6091A20B">
+	<Item class="Selection" referent="RBX6F900F6D6C504964871AC86CF3B39415">
 		<Properties>
 			<BinaryString name="AttributesSerialize"></BinaryString>
 			<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
@@ -1330,7 +1332,7 @@ else task.spawn(function() timestamps:SetAsync(tostring(userId), os.time()) end)
 			<UniqueId name="UniqueId">44b188dace632b4702e9c68d0048309d</UniqueId>
 		</Properties>
 	</Item>
-	<Item class="VRService" referent="RBXC729326571F04D31A07F9CAE2B931AD4">
+	<Item class="VRService" referent="RBXEA7F1A0CF8354037880F1831EE5B2B3B">
 		<Properties>
 			<BinaryString name="AttributesSerialize"></BinaryString>
 			<token name="AutomaticScaling">0</token>
@@ -1347,7 +1349,7 @@ else task.spawn(function() timestamps:SetAsync(tostring(userId), os.time()) end)
 			<UniqueId name="UniqueId">44b188dace632b4702e9c68d00483091</UniqueId>
 		</Properties>
 	</Item>
-	<Item class="ContextActionService" referent="RBX1B37CE6D38A34F2C8941B1D03E8B9354">
+	<Item class="ContextActionService" referent="RBXF30529B5D2AA4AA8819489A5F449984C">
 		<Properties>
 			<BinaryString name="AttributesSerialize"></BinaryString>
 			<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
@@ -1359,7 +1361,7 @@ else task.spawn(function() timestamps:SetAsync(tostring(userId), os.time()) end)
 			<UniqueId name="UniqueId">44b188dace632b4702e9c68d00483093</UniqueId>
 		</Properties>
 	</Item>
-	<Item class="ScriptService" referent="RBX11C120354A3F44A1AC540308E8C58081">
+	<Item class="ScriptService" referent="RBX3CA2527FE8B14BC78DB57621A3A9433E">
 		<Properties>
 			<BinaryString name="AttributesSerialize"></BinaryString>
 			<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
@@ -1371,7 +1373,7 @@ else task.spawn(function() timestamps:SetAsync(tostring(userId), os.time()) end)
 			<UniqueId name="UniqueId">44b188dace632b4702e9c68d00483095</UniqueId>
 		</Properties>
 	</Item>
-	<Item class="AssetService" referent="RBX317066205436479EA77B109DECE767F7">
+	<Item class="AssetService" referent="RBXF66B17DBD2FB4AAF8F3635BC7EE4E56B">
 		<Properties>
 			<bool name="AllowInsertFreeAssets">false</bool>
 			<BinaryString name="AttributesSerialize"></BinaryString>
@@ -1384,7 +1386,7 @@ else task.spawn(function() timestamps:SetAsync(tostring(userId), os.time()) end)
 			<UniqueId name="UniqueId">44b188dace632b4702e9c68d00483096</UniqueId>
 		</Properties>
 	</Item>
-	<Item class="TouchInputService" referent="RBXB546B11E757F48F892F21C86938C6145">
+	<Item class="TouchInputService" referent="RBX3EC5A55ACA7F4622BBB9F433039992F5">
 		<Properties>
 			<BinaryString name="AttributesSerialize"></BinaryString>
 			<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
@@ -1396,7 +1398,7 @@ else task.spawn(function() timestamps:SetAsync(tostring(userId), os.time()) end)
 			<UniqueId name="UniqueId">44b188dace632b4702e9c68d00483097</UniqueId>
 		</Properties>
 	</Item>
-	<Item class="AvatarSettings" referent="RBX00346AD81080432AB9B2BBB5E115BFD0">
+	<Item class="AvatarSettings" referent="RBX78102177D58B4E5FBD09011B84E20B6C">
 		<Properties>
 			<BinaryString name="AttributesSerialize"></BinaryString>
 			<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
@@ -1407,7 +1409,7 @@ else task.spawn(function() timestamps:SetAsync(tostring(userId), os.time()) end)
 			<BinaryString name="Tags"></BinaryString>
 			<UniqueId name="UniqueId">742d8c436b8fe81e08caedb20000036e</UniqueId>
 		</Properties>
-		<Item class="AvatarRules" referent="RBXF664D0C599F6470F8CE9305C3F7FAD80">
+		<Item class="AvatarRules" referent="RBX8BDCFD2457604E60AE5C364A05C587D2">
 			<Properties>
 				<BinaryString name="AttributesSerialize"></BinaryString>
 				<token name="AvatarType">1</token>
@@ -1417,9 +1419,9 @@ else task.spawn(function() timestamps:SetAsync(tostring(userId), os.time()) end)
 				<string name="Name">DefaultAvatarRules</string>
 				<int64 name="SourceAssetId">-1</int64>
 				<BinaryString name="Tags"></BinaryString>
-				<UniqueId name="UniqueId">463898f81460ffc308ce5766000003a8</UniqueId>
+				<UniqueId name="UniqueId">7d1409af4e2dabc608d5539c000003a8</UniqueId>
 			</Properties>
-			<Item class="AvatarBodyRules" referent="RBX32C0A49E928646F9835CF6CC059E1D01">
+			<Item class="AvatarBodyRules" referent="RBX6251D9704F9A44B7B46D2F908B3E1D1C">
 				<Properties>
 					<token name="AppearanceMode">0</token>
 					<BinaryString name="AttributesSerialize"></BinaryString>
@@ -1460,10 +1462,10 @@ else task.spawn(function() timestamps:SetAsync(tostring(userId), os.time()) end)
 					<token name="ScaleMode">0</token>
 					<int64 name="SourceAssetId">-1</int64>
 					<BinaryString name="Tags"></BinaryString>
-					<UniqueId name="UniqueId">463898f81460ffc308ce5766000003a9</UniqueId>
+					<UniqueId name="UniqueId">7d1409af4e2dabc608d5539c000003a9</UniqueId>
 				</Properties>
 			</Item>
-			<Item class="AvatarCollisionRules" referent="RBX0C2A8E74FC4F45F8BF5C67FD50F6420D">
+			<Item class="AvatarCollisionRules" referent="RBXB588725D42A3498D82E24FB8C2671655">
 				<Properties>
 					<BinaryString name="AttributesSerialize"></BinaryString>
 					<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
@@ -1480,10 +1482,10 @@ else task.spawn(function() timestamps:SetAsync(tostring(userId), os.time()) end)
 					</Vector3>
 					<int64 name="SourceAssetId">-1</int64>
 					<BinaryString name="Tags"></BinaryString>
-					<UniqueId name="UniqueId">463898f81460ffc308ce5766000003aa</UniqueId>
+					<UniqueId name="UniqueId">7d1409af4e2dabc608d5539c000003aa</UniqueId>
 				</Properties>
 			</Item>
-			<Item class="AvatarAnimationRules" referent="RBX740498F629234C0F8C2FA67C0EB75FBC">
+			<Item class="AvatarAnimationRules" referent="RBXF030D952F4B049D4A89E119180933D95">
 				<Properties>
 					<token name="AnimationClipsMode">0</token>
 					<token name="AnimationPacksMode">0</token>
@@ -1514,10 +1516,10 @@ else task.spawn(function() timestamps:SetAsync(tostring(userId), os.time()) end)
 					<string name="Name">AvatarAnimationRules</string>
 					<int64 name="SourceAssetId">-1</int64>
 					<BinaryString name="Tags"></BinaryString>
-					<UniqueId name="UniqueId">463898f81460ffc308ce5766000003ab</UniqueId>
+					<UniqueId name="UniqueId">7d1409af4e2dabc608d5539c000003ab</UniqueId>
 				</Properties>
 			</Item>
-			<Item class="AvatarAccessoryRules" referent="RBX346A7DBEF8444C26A8B6DB72B27B6737">
+			<Item class="AvatarAccessoryRules" referent="RBX1E20CFCAB2DE4A5786865DC216FFB4DC">
 				<Properties>
 					<token name="AccessoryMode">0</token>
 					<BinaryString name="AttributesSerialize"></BinaryString>
@@ -1552,10 +1554,10 @@ else task.spawn(function() timestamps:SetAsync(tostring(userId), os.time()) end)
 					<string name="Name">AvatarAccessoryRules</string>
 					<int64 name="SourceAssetId">-1</int64>
 					<BinaryString name="Tags"></BinaryString>
-					<UniqueId name="UniqueId">463898f81460ffc308ce5766000003ac</UniqueId>
+					<UniqueId name="UniqueId">7d1409af4e2dabc608d5539c000003ac</UniqueId>
 				</Properties>
 			</Item>
-			<Item class="AvatarClothingRules" referent="RBXD7D2790482DE46499A00E357694A3BDA">
+			<Item class="AvatarClothingRules" referent="RBX427AFC5BD17847B5A9D0AB9601E48723">
 				<Properties>
 					<BinaryString name="AttributesSerialize"></BinaryString>
 					<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
@@ -1595,12 +1597,12 @@ else task.spawn(function() timestamps:SetAsync(tostring(userId), os.time()) end)
 					<string name="Name">AvatarClothingRules</string>
 					<int64 name="SourceAssetId">-1</int64>
 					<BinaryString name="Tags"></BinaryString>
-					<UniqueId name="UniqueId">463898f81460ffc308ce5766000003ad</UniqueId>
+					<UniqueId name="UniqueId">7d1409af4e2dabc608d5539c000003ad</UniqueId>
 				</Properties>
 			</Item>
 		</Item>
 	</Item>
-	<Item class="LuaWebService" referent="RBX4C64701C3C4F46D0B0FC982481BFD657">
+	<Item class="LuaWebService" referent="RBX1AB6B5A0FC804FADBB8D62ADFDC17DAF">
 		<Properties>
 			<BinaryString name="AttributesSerialize"></BinaryString>
 			<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
@@ -1612,7 +1614,7 @@ else task.spawn(function() timestamps:SetAsync(tostring(userId), os.time()) end)
 			<UniqueId name="UniqueId">44b188dace632b4702e9c68d004830a7</UniqueId>
 		</Properties>
 	</Item>
-	<Item class="ProcessInstancePhysicsService" referent="RBX1F30461B3FE74993BD34BCF2F4521E70">
+	<Item class="ProcessInstancePhysicsService" referent="RBX53CF591858F547949B3ED41C2A923A71">
 		<Properties>
 			<BinaryString name="AttributesSerialize"></BinaryString>
 			<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
@@ -1624,7 +1626,7 @@ else task.spawn(function() timestamps:SetAsync(tostring(userId), os.time()) end)
 			<UniqueId name="UniqueId">44b188dace632b4702e9c68d004830a8</UniqueId>
 		</Properties>
 	</Item>
-	<Item class="ReplicatedStorage" referent="RBX78292A2898E24137AB49D1A50E8FD46C">
+	<Item class="ReplicatedStorage" referent="RBXECCC0ACE4803462CA4FC4A25C017092E">
 		<Properties>
 			<BinaryString name="AttributesSerialize"></BinaryString>
 			<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
@@ -1636,7 +1638,7 @@ else task.spawn(function() timestamps:SetAsync(tostring(userId), os.time()) end)
 			<UniqueId name="UniqueId">44b188dace632b4702e9c68d004830a0</UniqueId>
 		</Properties>
 	</Item>
-	<Item class="ServerScriptService" referent="RBXE6F7D93544994C3DBE90275AE4C98A20">
+	<Item class="ServerScriptService" referent="RBX058BD0B2B9C14F3F91F16C9592AD19D7">
 		<Properties>
 			<BinaryString name="AttributesSerialize"></BinaryString>
 			<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
@@ -1649,7 +1651,7 @@ else task.spawn(function() timestamps:SetAsync(tostring(userId), os.time()) end)
 			<UniqueId name="UniqueId">44b188dace632b4702e9c68d0048309e</UniqueId>
 		</Properties>
 	</Item>
-	<Item class="ServerStorage" referent="RBX1AAE202215804FA5953208D2B2C9037F">
+	<Item class="ServerStorage" referent="RBX08DBF2201ACF46DA97BC1C3D9375A43D">
 		<Properties>
 			<BinaryString name="AttributesSerialize"></BinaryString>
 			<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
@@ -1661,7 +1663,7 @@ else task.spawn(function() timestamps:SetAsync(tostring(userId), os.time()) end)
 			<UniqueId name="UniqueId">44b188dace632b4702e9c68d0048309f</UniqueId>
 		</Properties>
 	</Item>
-	<Item class="ServiceVisibilityService" referent="RBXA4202902B2E047A3A484906C07ECA267">
+	<Item class="ServiceVisibilityService" referent="RBX371A9926216446BDB87AD107DED29117">
 		<Properties>
 			<BinaryString name="AttributesSerialize"></BinaryString>
 			<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
@@ -1675,7 +1677,7 @@ else task.spawn(function() timestamps:SetAsync(tostring(userId), os.time()) end)
 			<BinaryString name="VisibleServices">AAAAAA==</BinaryString>
 		</Properties>
 	</Item>
-	<Item class="HttpService" referent="RBX7A191F8941D74AF7BE7D5E1E540F1D52">
+	<Item class="HttpService" referent="RBX15BD72AF132C465F87B6752926903911">
 		<Properties>
 			<BinaryString name="AttributesSerialize"></BinaryString>
 			<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
@@ -1688,7 +1690,7 @@ else task.spawn(function() timestamps:SetAsync(tostring(userId), os.time()) end)
 			<UniqueId name="UniqueId">44b188dace632b4702e9c68d004831fc</UniqueId>
 		</Properties>
 	</Item>
-	<Item class="DataStoreService" referent="RBXF95763DDFA3C4786B83BDF1692CDE107">
+	<Item class="DataStoreService" referent="RBX866AD5762CEF4AED884E0DD030D8379A">
 		<Properties>
 			<BinaryString name="AttributesSerialize"></BinaryString>
 			<bool name="AutomaticRetry">true</bool>
@@ -1702,7 +1704,7 @@ else task.spawn(function() timestamps:SetAsync(tostring(userId), os.time()) end)
 			<UniqueId name="UniqueId">44b188dace632b4702e9c68d004831f9</UniqueId>
 		</Properties>
 	</Item>
-	<Item class="Lighting" referent="RBX4FA37A7A22834CF4BB513E2D8B8C6439">
+	<Item class="Lighting" referent="RBXEF208F5DEE4B4171808C7CBCBFAE0D59">
 		<Properties>
 			<Color3 name="Ambient">
 				<R>0.274509817</R>
@@ -1756,7 +1758,7 @@ aW5nAwA=]]></BinaryString>
 			<UniqueId name="UniqueId">44b188dace632b4702e9c68d004830cd</UniqueId>
 		</Properties>
 	</Item>
-	<Item class="LodDataService" referent="RBXCD9E072F9EF84CF3A0A60B7D05B1570D">
+	<Item class="LodDataService" referent="RBXAA073956F969438BB53B6A0AA2CADDE1">
 		<Properties>
 			<BinaryString name="AttributesSerialize"></BinaryString>
 			<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
@@ -1768,7 +1770,7 @@ aW5nAwA=]]></BinaryString>
 			<UniqueId name="UniqueId">44b188dace632b4702e9c68d004830d0</UniqueId>
 		</Properties>
 	</Item>
-	<Item class="ProximityPromptService" referent="RBX8D76B4999DC94998B8DCB8F754F6E70E">
+	<Item class="ProximityPromptService" referent="RBX05A6BC3739B141B58ABD169EDA00AF3A">
 		<Properties>
 			<BinaryString name="AttributesSerialize"></BinaryString>
 			<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
@@ -1783,7 +1785,7 @@ aW5nAwA=]]></BinaryString>
 			<UniqueId name="UniqueId">715a2f9be948d8cb04bde89e00003593</UniqueId>
 		</Properties>
 	</Item>
-	<Item class="Teams" referent="RBX2DBCC8256B3F4132B1F4335D16C80EDD">
+	<Item class="Teams" referent="RBX5E98A3E556C34A82941E847F165A14FE">
 		<Properties>
 			<BinaryString name="AttributesSerialize"></BinaryString>
 			<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
@@ -1795,7 +1797,7 @@ aW5nAwA=]]></BinaryString>
 			<UniqueId name="UniqueId">44b188dace632b4702e9c68d00483204</UniqueId>
 		</Properties>
 	</Item>
-	<Item class="TestService" referent="RBX0B26142C78874BB292EA6A320AF795D3">
+	<Item class="TestService" referent="RBXDBAA7A064E0848E5B4DB96BA264257BC">
 		<Properties>
 			<BinaryString name="AttributesSerialize"></BinaryString>
 			<bool name="AutoRuns">true</bool>
@@ -1816,7 +1818,7 @@ aW5nAwA=]]></BinaryString>
 			<UniqueId name="UniqueId">44b188dace632b4702e9c68d00483206</UniqueId>
 		</Properties>
 	</Item>
-	<Item class="UGCAvatarService" referent="RBX49505D11E826455B879F4E7D3607F17D">
+	<Item class="UGCAvatarService" referent="RBX2D8BCB260AED47DE980865C684B6F5AB">
 		<Properties>
 			<BinaryString name="AttributesSerialize"></BinaryString>
 			<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
@@ -1828,7 +1830,7 @@ aW5nAwA=]]></BinaryString>
 			<UniqueId name="UniqueId">04b8a8d0f991a2b704f90bb600003421</UniqueId>
 		</Properties>
 	</Item>
-	<Item class="VideoService" referent="RBX6843BAC9FD964380AEF4DD6BCFF4DEFF">
+	<Item class="VideoService" referent="RBX1E9D4C22F3EC4BDDB5272634EFFB6A85">
 		<Properties>
 			<BinaryString name="AttributesSerialize"></BinaryString>
 			<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
@@ -1840,7 +1842,7 @@ aW5nAwA=]]></BinaryString>
 			<UniqueId name="UniqueId">742d8c436b8fe81e08caedb2000003ba</UniqueId>
 		</Properties>
 	</Item>
-	<Item class="VirtualInputManager" referent="RBXACCAF4022A7A48C78AAB48609E7818CC">
+	<Item class="VirtualInputManager" referent="RBX8FF86809678741F6AC3CFD8E0DDF055F">
 		<Properties>
 			<BinaryString name="AttributesSerialize"></BinaryString>
 			<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
