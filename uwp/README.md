@@ -38,6 +38,9 @@ DELAY = 6
 # Roblox UWP Protocol Indexes
 START_INDEX = 1
 END_INDEX = 4
+
+# Kills Edge
+KILL_EDGE = True
 ```
 
 ## [multiUWP.bat](/multiUWP.bat)

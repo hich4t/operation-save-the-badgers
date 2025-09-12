@@ -1,8 +1,11 @@
-import os, time
+import webbrowser, time, os
 from cfg import *
 
-FUNC = "start" if os.name == "nt" else "xdg-open"
+isTermux = "TERMUX" in os.environ
+
+url = f"roblox://placeid={PLACE_ID}"
 
 while True:
-    os.system(f"{FUNC} roblox://placeid={PLACE_ID}")
+    if isTermux: os.system(f"xdg-open {url}")
+    else: webbrowser.open(url)
     time.sleep(DELAY)

@@ -27,7 +27,7 @@ def joiner():
         t.join()
 
 def killedge():
-    while True:
+    while KILL_EDGE:
         killprocess(msedge)
         time.sleep(DELAY)
 
