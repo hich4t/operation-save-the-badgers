@@ -6,7 +6,7 @@
 # .-,_|___|_,-.<<,-,,-.   ||>>_       \\     //   \\_  _// \\_  )(  (__) 
 #  \_)-' '-(_/  (./  \.) (__)__)     (__)   (__)  (__)(__) (__)(__)      
 
-import traceback, discord, asyncio, aiohttp, aiofiles, gspread, json, time, sys, re, os
+import traceback, webbrowser, discord, asyncio, aiohttp, aiofiles, gspread, json, time, sys, re, os
 
 from discord.ext import commands, tasks
 import discord.ui as ui
@@ -32,6 +32,7 @@ if not os.path.exists("requesters.json"):
     with open("requesters.json", "w") as file:
         file.write("{}")
 
+ignore = []
 queue = []
 with open("queue.csv", "r") as file:
     for line in open("queue.csv", "r").readlines():
@@ -144,7 +145,10 @@ async def change_datastore(session: aiohttp.ClientSession, place_id):
 async def get_latest(session: aiohttp.ClientSession):
     request = await session.get(
         f"https://apis.roblox.com/ordered-data-stores/v1/universes/{HUB_ID}/orderedDataStores/lastJoined/scopes/global/entries",
-        params={"max_page_size": 10},
+        params={
+            "max_page_size": 100,
+            "order_by": "desc"
+        },
         headers={"x-api-key": API_KEY}
     )
     request.raise_for_status()
@@ -153,11 +157,15 @@ async def get_latest(session: aiohttp.ClientSession):
 
     current = time.time()
     active = 1 if FARMING else 0
+
     for entry in response.get("entries"):
-        if int(entry.get("value")) > current - ACTIVE_THRESHOLD: active += 1
+        user_time = int(entry.get("value"))
+        limit = current - ACTIVE_THRESHOLD
+
+        if user_time > limit: active += 1
     
     return active
-
+        
 #    ____     U  ___ u _____        ____   U _____ u  _____    _   _   ____    
 # U | __")u    \/"_ \/|_ " _|      / __"| u\| ___"|/ |_ " _|U |"|u| |U|  _"\ u 
 #  \|  _ \/    | | | |  | |       <\___ \/  |  _|"     | |   \| |\| |\| |_) |/ 
@@ -180,75 +188,96 @@ agc: AsyncioGspreadClient = None
 @tasks.loop(seconds=20)
 async def checking_visits():
     global queue
+    global ignore
+    global requesters
 
     try:
-        if not queue and agc: 
+        if len(queue) < 10 and agc:
             spreadsheet = await agc.open_by_key(SPREADSHEET_ID)
             wip_sheet = await spreadsheet.get_worksheet(0)
-            row = await wip_sheet.get(f'A20:E20')
+            rows = await wip_sheet.get(f'A6:E{max(6, 16-len(queue))}')
 
-            row = row[0]
-            place_id = str(row[0].split("/")[-1])
-            universe_id = str(row[1])
-            queue.append((place_id, universe_id))
-        
+            for row in rows:
+                place_id = str(row[0].split("/")[-1])
+                universe_id = str(row[1])
+
+                if place_id not in ignore: queue.append((place_id, universe_id))
+
         if not queue: return
-        universes = await get_universes(session, [queue[0][1]])
 
-        universe = universes[0]
-        universe_id = str(queue[0][1])
-        place_id = str(queue[0][0])
+        universes = await get_universes(session, [universe_id for place_id, universe_id in queue[:10]])
+        maturities = await asyncio.gather(*[get_universe_maturity(session, universe_id) for place_id, universe_id in queue[:10]])
+
+        saved = []
+
+        for i, universe in enumerate(universes):
+            universe_id = str(universe.get("id"))
+            place_id = str(universe.get("rootPlaceId"))
+            maturity = maturities[i]
+
+            if universe.get("visits") > 1000 or maturity.get("contentMaturity") != "unrated":
+                ignore.append(place_id)
+                index = queue.index((place_id, universe_id))
+                queue.pop(index)
+
+                url = f"https://www.roblox.com/games/{place_id}"
+                saved.append(url)
+
+                requester = requesters.get(universe_id)
+                if not requester: continue
+
+                for user_id in requester:
+                    if "thread" in str(user_id):
+                        thread = await client.fetch_channel(int(user_id.replace("thread", "")))
+                        if not thread: continue
+
+                        thread_requests = [temp_requester for temp_requesters in requesters for temp_requester in temp_requesters if "thread" in str(temp_requester)]
+                        if len(thread_requests) > 1: continue
+
+                        try:
+                            forum: discord.ForumChannel = await client.fetch_channel(PRIORITY_CHANNEL)
+                            tags = [tag for tag in thread.applied_tags if tag.id != WIP_TAG and tag.id != FINISHED_TAG]
+
+                            tags.append(forum.get_tag(FINISHED_TAG))
+
+                            await thread.edit(applied_tags=list(set(tags)))
+                        except Exception as e: print(e)
+                    else:
+                        try:
+                            user = await client.fetch_user(user_id)
+                            if not user: continue
+
+                            await user.send(f"farmed [{universe.get('name')}](<{url}>)")#, joins requested: {JOINS * RATIO}")
+                        except Exception as e: print(e)
+
+                requesters[universe_id] = None
         
-        maturity = await get_universe_maturity(session, universe_id)
-
-        if universe.get("visits") > 1000 or maturity.get("contentMaturity") != "unrated":
-            queue.pop(0)
-
+        if saved:
             await write_queue()
             await write_requesters()
 
             channel = client.get_channel(SAVED_CHANNEL)
-            await channel.send(f"https://www.roblox.com/games/{place_id}")
+            await channel.send("\n".join(saved))
 
-            requester = requesters.get(universe_id)
-            if requester:
-                for user_id in requester:
-                    if "thread" in user_id:
-                        thread = await client.fetch_channel(int(user_id.replace("thread", "")))
-                        if not thread: continue
+        if HUB_ID: await change_datastore(session, json.dumps([place_id for place_id, universe_id in queue[:10]])) #await asyncio.gather(*[post_message(session, place_id), change_datastore(session, place_id)])
 
-                        forum: discord.ForumChannel = await client.get_channel(PRIORITY_CHANNEL)
-                        tags = [tag for tag in thread.applied_tags if tag.id != WIP_TAG]
-
-                        tags.append(forum.get_tag(FINISHED_TAG))
-
-                        await thread.edit(applied_tags=tags)
-                    else:
-                        try:
-                            user = await client.fetch_user(user_id)
-
-                            await user.send(f"farmed [{universe.get('name')}](<https://www.roblox.com/games/{universe.get('rootPlaceId')}>)")#, joins requested: {JOINS * RATIO}")
-                        except Exception as e: print(e)
-
-                requesters[universe_id] = None
-
-            return await client.change_presence(status=discord.Status.idle)
-        else:
-            if HUB_ID: await asyncio.gather(*[post_message(session, place_id), change_datastore(session, place_id)])
-
-        game = discord.Game(name=universe.get("name"))
-        await client.change_presence(status=discord.Status.idle, activity=game)
+        #game = discord.Game(name=universe.get("name"))
+        #await client.change_presence(status=discord.Status.idle, activity=game)
     except Exception as e:
         traceback.print_exception(type(e), e, e.__traceback__, file=sys.stderr)
 
 async def farm_visits():
     global JOINS
     while True:
-        if not queue or not FARMING:
-            await asyncio.sleep(5)
-            continue
+        try:
+            if not queue or not FARMING: await asyncio.sleep(5); continue
 
-        if queue[0][0]: os.system(f"{FUNC} roblox://placeid={queue[0][0]}"); JOINS += 1
+            if queue[0][0]:
+                url = f"roblox://placeid={queue[0][0]}"
+                if "TERMUX" in os.environ: os.system(f"xdg-open {url}")
+                else: webbrowser.open(url)
+                JOINS += 1
+        except Exception as e: traceback.print_exception(type(e), e, e.__traceback__, file=sys.stderr)
         await asyncio.sleep(DELAY)
 
 def get_creds():
@@ -266,8 +295,9 @@ async def on_ready():
 
     session = aiohttp.ClientSession(cookies={".ROBLOSECURITY": ROBLOSECURITY})
 
-    checking_visits.start() 
-    client.loop.create_task(farm_visits())
+    if not checking_visits.is_running(): checking_visits.start() 
+
+    asyncio.create_task(farm_visits())
 
     agcm = AsyncioGspreadClientManager(get_creds)
     agc = await agcm.authorize()
@@ -456,7 +486,7 @@ async def get_place_ids(content: str):
             match = re.search(r'\d+', url)
             if match: place_ids.append(str(match.group(0)))
 
-    return place_ids
+    return list(set(place_ids))
 
 @client.slash_command(name="toggle", description="toggle farm")
 @commands.check(whitelist_check)
@@ -557,7 +587,7 @@ async def list_queue(ctx: discord.ApplicationContext):
     view = CustomPages(pages=pages, user=ctx.author)
     return await ctx.edit(view=view)
 
-async def add_queue_wrap(ctx: discord.ApplicationContext = None, message: discord.Message = ""):
+async def add_queue_wrap(ctx: discord.ApplicationContext = None, message: discord.Message = None):
     global queue
     global requesters
 
@@ -595,8 +625,8 @@ async def add_queue_wrap(ctx: discord.ApplicationContext = None, message: discor
                 
                 game_link = f"https://www.roblox.com/games/{place_id}"
                 
-                if visits > 1000: data.append(["`❌", game_name, visits, "", "> 1k visits`", game_link]); continue
                 if not place.get("isPlayable") and not playability.get("isPlayable"): data.append(["`❌", game_name, visits, "", "privated`", game_link]); continue
+                if visits > 1000: data.append(["`❌", game_name, visits, "", "> 1k visits`", game_link]); continue
 
                 game = (place_id, universe_id)
 
@@ -610,8 +640,8 @@ async def add_queue_wrap(ctx: discord.ApplicationContext = None, message: discor
                     requester_ids.append(ctx.author.id)
                 if message and message.author.id not in requester_ids:
                     requester_ids.append(message.author.id)
-                if ctx and isinstance(ctx.channel, discord.Thread):
-                    requester_ids.append(f"thread{ctx.channel_id}")
+                if isinstance(message.channel, discord.Thread):
+                    requester_ids.append(f"thread{message.channel.id}")
                 
                 requesters[str(place.get("universeId"))] = requester_ids
 
@@ -623,6 +653,17 @@ async def add_queue_wrap(ctx: discord.ApplicationContext = None, message: discor
         pages = create_spreadsheet_container(header, data)
 
         paginator = CustomPages(pages=pages, user=ctx.author if ctx else message.author)
+
+        if isinstance(message.channel, discord.Thread):
+            thread = message.channel
+            forum: discord.ForumChannel = await client.fetch_channel(PRIORITY_CHANNEL)
+
+            tags = [tag for tag in thread.applied_tags if tag.id != FINISHED_TAG and tag.id != WIP_TAG]
+
+            tags.append(forum.get_tag(WIP_TAG))
+
+            await thread.edit(applied_tags=list(set(tags)))
+
         if ctx: await ctx.edit(view=paginator)
         else: return await message.reply(view=paginator)
     else:
@@ -671,14 +712,21 @@ async def on_message(message: discord.Message):
         if message.author.id == client.user.id: return
         return await add_queue_wrap(message=message)
     elif message.channel.id == SAVED_CHANNEL:
+        global ignore
         place_ids = await get_place_ids(message.content)
         if not place_ids: return
 
         places = await get_places(session, place_ids)
 
         universe_ids = [place.get("universeId") for place in places]
-        universes = await get_universes(session, universe_ids)
-        maturities = await asyncio.gather(*[get_universe_maturity(session, universe_id) for universe_id in universe_ids])
+        
+        universes: list[dict] = await get_universes(session, universe_ids)
+        maturities, badges = await asyncio.gather(*[
+            asyncio.gather(*[get_universe_maturity(session, universe_id) for universe_id in universe_ids]), 
+            asyncio.gather(*[get_badges(session, universe_id) for universe_id in universe_ids])
+        ])
+        #maturities = await asyncio.gather(*[get_universe_maturity(session, universe_id) for universe_id in universe_ids])
+        #badges = await asyncio.gather(*[get_badges(session, universe_id) for universe_id in universe_ids])
 
         spreadsheet = await agc.open_by_key(SPREADSHEET_ID)
         wip_sheet = await spreadsheet.get_worksheet(0)
@@ -690,28 +738,31 @@ async def on_message(message: discord.Message):
 
         header = ["`🔲", "Name", "Note", "Link   `"]
         data = []
-        cells: gspread.Cell = []
-        dups: gspread.Cell = []
+        cells: list[gspread.Cell] = []
+        dups: list[gspread.Cell] = []
         deleting = True
         
         for i, universe in enumerate(universes, 0):
-            universe_id = universe.get("id")
-            place_id = universe.get("rootPlaceId")
+            #universe_id = universe.get("id")
+            place_id = str(universe.get("rootPlaceId"))
 
             url = urls[i] #f"https://www.roblox.com/games/{place_id}"
 
             name = universe.get("name")
             visits = universe.get("visits")
             maturity = maturities[i]
+            legacies = len(get_legacies(badges[i]))
 
             cell = wips[i]
             isdonebefore = dones[i]
 
             if visits < 1000 and maturity.get("contentMaturity") == "unrated": data.append(["`❌", name, "<1k visits`", url]); continue
-            if isdonebefore and not cell: data.append(["`❌", name, "in table`", url]); continue
-            if not cell: data.append(["`⚠", name, "not in table`", url]); deleting = False; continue
-            if cell and isdonebefore: dups.append(cell); continue
+            if isdonebefore and not cell: data.append(["`❌", name, "in table`", url]); ignore.append(place_id); continue
+            if legacies == 0: data.append(["`❌", name, "no legacies`", url]); ignore.append(place_id); continue
+            if not cell: data.append(["`⚠", name, "not in table`", url]); ignore.append(place_id); deleting = False; continue
 
+            if cell and isdonebefore: data.append(["`⚠", name, "duplicate`", url]); dups.append(cell); continue
+            
             cells.append(cell)
             data.append(["`✅", name, "`", url])
         
@@ -722,8 +773,11 @@ async def on_message(message: discord.Message):
             await done_sheet.append_row(row_data)
             await wip_sheet.delete_rows(row_index)
 
-        await asyncio.gather(*[move_cell(cell) for cell in cells])
-        await asyncio.gather(*[wip_sheet.delete_rows(dupe.row) for dupe in dups])
+        for cell in cells: await move_cell(cell)
+        for dupe in dups: await wip_sheet.delete_rows(dupe.row)
+
+        #await asyncio.gather(*[move_cell(cell) for cell in cells])
+        #await asyncio.gather(*[wip_sheet.delete_rows(dupe.row) for dupe in dups])
 
         pages = create_spreadsheet_container(header, data)
         

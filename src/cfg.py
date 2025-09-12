@@ -1,5 +1,3 @@
-import os
-
 #  __     __     _       ____                   _        ____     _     U _____ u ____     
 #  \ \   /"/uU  /"\  uU |  _"\ u     ___    U  /"\  u U | __")u  |"|    \| ___"|// __"| u  
 #   \ \ / //  \/ _ \/  \| |_) |/    |_"_|    \/ _ \/   \|  _ \/U | | u   |  _|" <\___ \/   
@@ -25,8 +23,6 @@ API_KEY = ""
 # Experience Id, 0 to disable
 HUB_ID = 0
 
-# Selfhost Start Roblox
-FUNC = "start" if os.name == "nt" else "xdg-open"
 # Farm Joins
 FARMING = False
 # Joiner Delay
