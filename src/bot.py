@@ -14,6 +14,7 @@ import discord.ui as ui
 from gspread_asyncio import AsyncioGspreadClientManager, AsyncioGspreadClient
 from google.oauth2.service_account import Credentials
 
+from rich import print
 from cfg import *
 
 #    _       U  ___ u    _      ____         ____     _____      _       _____  U _____ u 
@@ -24,6 +25,7 @@ from cfg import *
 #   //  \\      \\    \\    >>  |||_         )(  (__)_// \\_  \\    >>  _// \\_  <<   >>  
 #  (_")("_)    (__)  (__)  (__)(__)_)       (__)    (__) (__)(__)  (__)(__) (__)(__) (__) 
 
+cookies = {".ROBLOSECURITY": ROBLOSECURITY}
 if not os.path.exists("queue.csv"): 
     with open("queue.csv", "w") as file:
         file.write("\n")
@@ -93,6 +95,12 @@ async def get_places(session: aiohttp.ClientSession, places: list):
 async def get_badges(session: aiohttp.ClientSession, universe_id):
     badges = []
     cursor = ""
+async def get_universe_playability(universes: list):
+    async with aiohttp.ClientSession(cookies=cookies) as session:
+        request = await session.get(f"https://games.roblox.com/v1/games/multiget-playability-status?universeIds={','.join(map(str, universes))}")
+        request.raise_for_status()
+        response = await request.json()
+        return response
 
     while cursor != None:
         request = await session.get(
@@ -101,71 +109,118 @@ async def get_badges(session: aiohttp.ClientSession, universe_id):
                 "limit": 100,
                 "cursor": cursor
             }
+async def get_universe_maturity(universe_id):
+    async with aiohttp.ClientSession(cookies=cookies) as session:
+        request = await session.post(
+            "https://apis.roblox.com/experience-guidelines-api/experience-guidelines/get-age-recommendation",
+            json={"universeId": str(universe_id)}
         )
         request.raise_for_status()
         response = await request.json()
+        return response.get("ageRecommendationDetails").get("summary").get("ageRecommendation")
 
-        badges.extend(response.get("data"))
-        cursor = response.get("nextPageCursor")
+async def get_places(places: list):
+    params = "&".join([f"placeIds={place}" for place in places])
+    async with aiohttp.ClientSession(cookies=cookies) as session:
+        request = await session.get(f"https://games.roblox.com/v1/games/multiget-place-details?{params}")
+        request.raise_for_status()
+        response = await request.json()
+        return response
+
+async def get_badges(universe_id):
+    badges = []
+    cursor = ""
+    async with aiohttp.ClientSession(cookies=cookies) as session:
+        while cursor != None:
+            request = await session.get(
+                f"https://badges.roblox.com/v1/universes/{universe_id}/badges",
+                params={
+                    "limit": 100,
+                    "cursor": cursor
+                }
+            )
+            request.raise_for_status()
+            response = await request.json()
+
+            badges.extend(response.get("data"))
+            cursor = response.get("nextPageCursor")
     
     return badges
 
 def get_legacies(badges: list):
     return [badge for badge in badges if badge.get("id") <= 2124945818]
 
-async def resolve_share(session: aiohttp.ClientSession, url: str):
-    request = await session.get(url)
-    request.raise_for_status()
-    html_content = await request.text()
+async def resolve_share(url: str):
+    async with aiohttp.ClientSession(cookies=cookies) as session:
+        request = await session.get(url)
+        request.raise_for_status()
+        html_content = await request.text()
 
     return html_content.split('''<meta name="roblox:start_place_id" content="''')[1].split('"')[0]
 
-async def post_message(session: aiohttp.ClientSession, place_id):
-    request = await session.post(
-        f"https://apis.roblox.com/messaging-service/v1/universes/{HUB_ID}/topics/placeId",
-        json={"message": place_id},
-        headers={"x-api-key": API_KEY}
-    )
-    status = request.status
-    response = {}
-    if status != 200: response = await request.json()
-    return status, response
+async def post_message(place_id):
+    async with aiohttp.ClientSession(headers={"x-api-key": API_KEY}) as session:
+        request = await session.post(
+            f"https://apis.roblox.com/messaging-service/v1/universes/{HUB_ID}/topics/placeId",
+            json={"message": place_id}
+        )
+        status = request.status
+        response = {}
+        if status != 200: response = await request.json()
+        return status, response
 
-async def change_datastore(session: aiohttp.ClientSession, place_id):
-    request = await session.patch(
-        f"https://apis.roblox.com/cloud/v2/universes/{HUB_ID}/data-stores/placeId/entries/placeId?allow_missing=true",
-        json={"value": str(place_id)},
-        headers={"x-api-key": API_KEY}
-    )
-    status = request.status
-    response = {}
-    if status != 200: response = await request.json()
-    return status, response
+async def change_datastore(place_id):
+    async with aiohttp.ClientSession(headers={"x-api-key": API_KEY}) as session:
+        request = await session.patch(
+            f"https://apis.roblox.com/cloud/v2/universes/{HUB_ID}/data-stores/placeId/entries/placeId?allow_missing=true",
+            json={"value": str(place_id)}
+        )
+        status = request.status
+        response = {}
+        if status != 200: response = await request.json()
+        return status, response
 
-async def get_latest(session: aiohttp.ClientSession):
-    request = await session.get(
-        f"https://apis.roblox.com/ordered-data-stores/v1/universes/{HUB_ID}/orderedDataStores/lastJoined/scopes/global/entries",
-        params={
-            "max_page_size": 100,
-            "order_by": "desc"
-        },
-        headers={"x-api-key": API_KEY}
-    )
-    request.raise_for_status()
+async def get_datastore(datastore: str, max_page_size: int = 100, order_by: str = "desc", page_token: str = "") -> dict:
+    async with aiohttp.ClientSession(headers={"x-api-key": API_KEY}) as session:
+        request = await session.get(
+            f"https://apis.roblox.com/ordered-data-stores/v1/universes/{HUB_ID}/orderedDataStores/{datastore}/scopes/global/entries",
+            params={
+                "max_page_size": max_page_size,
+                "order_by": order_by,
+                "page_token": page_token
+            }
+        )
+        request.raise_for_status()
 
-    response = await request.json()
+        response = await request.json()
+        return response
+
+async def get_latest(page_token: str = ""):
+    datastore = await get_datastore(datastore="lastJoined", page_token=page_token)
 
     current = time.time()
     active = 1 if FARMING else 0
 
-    for entry in response.get("entries"):
+    for entry in datastore.get("entries"):
         user_time = int(entry.get("value"))
         limit = current - ACTIVE_THRESHOLD
 
         if user_time > limit: active += 1
     
     return active
-        
+
+async def get_users(user_ids: list):
+    async with aiohttp.ClientSession(cookies=cookies) as session:
+        request = await session.post(
+            "https://users.roblox.com/v1/users",
+            json={"userIds": user_ids, "excludeBannedUsers": False}
+        )
+
+        request.raise_for_status()
+
+        response = await request.json()
+        return response.get("data")
+
 #    ____     U  ___ u _____        ____   U _____ u  _____    _   _   ____    
 # U | __")u    \/"_ \/|_ " _|      / __"| u\| ___"|/ |_ " _|U |"|u| |U|  _"\ u 
 #  \|  _ \/    | | | |  | |       <\___ \/  |  _|"     | |   \| |\| |\| |_) |/ 
@@ -182,8 +237,9 @@ client = discord.Bot(
         discord.IntegrationType.guild_install
     }
 )
-session: aiohttp.ClientSession = None
+
 agc: AsyncioGspreadClient = None
+emojis: dict[str: discord.AppEmoji] = None
 
 @tasks.loop(seconds=20)
 async def checking_visits():
@@ -194,28 +250,42 @@ async def checking_visits():
     try:
         if len(queue) < 10 and agc:
             spreadsheet = await agc.open_by_key(SPREADSHEET_ID)
-            wip_sheet = await spreadsheet.get_worksheet(0)
-            rows = await wip_sheet.get(f'A6:E{max(6, 16-len(queue))}')
+            wip_sheet = await spreadsheet.get_worksheet(5)
+            rows = await wip_sheet.get(f'A2:E{max(2, 12-len(queue))}')
 
             for row in rows:
                 place_id = str(row[0].split("/")[-1])
                 universe_id = str(row[1])
+                game = (place_id, universe_id)
+                # print(ignore, queue, game)
 
-                if place_id not in ignore: queue.append((place_id, universe_id))
+                # print(place_id not in ignore)
+                # print(game not in queue)
+
+                if place_id not in ignore and game not in queue: queue.append(game)
 
         if not queue: return
 
-        universes = await get_universes(session, [universe_id for place_id, universe_id in queue[:10]])
-        maturities = await asyncio.gather(*[get_universe_maturity(session, universe_id) for place_id, universe_id in queue[:10]])
+        chopped_queue = queue[:10]
+        place_ids = [place_id for place_id, universe_id in chopped_queue]
+        universe_ids = [universe_id for place_id, universe_id in chopped_queue]
+
+        universes, places, maturities = await asyncio.gather(*[
+            get_universes(universe_ids),
+            get_places(place_ids),
+            asyncio.gather(*[get_universe_maturity(universe_id) for universe_id in universe_ids]),
+        ])
 
         saved = []
 
         for i, universe in enumerate(universes):
+            #print(universe)
             universe_id = str(universe.get("id"))
             place_id = str(universe.get("rootPlaceId"))
             maturity = maturities[i]
+            place = places[i]
 
-            if universe.get("visits") > 1000 or maturity.get("contentMaturity") != "unrated":
+            if universe.get("visits") > 1000 or maturity.get("contentMaturity") != "unrated" or not place.get("isPlayable"):
                 ignore.append(place_id)
                 index = queue.index((place_id, universe_id))
                 queue.pop(index)
@@ -259,7 +329,7 @@ async def checking_visits():
             channel = client.get_channel(SAVED_CHANNEL)
             await channel.send("\n".join(saved))
 
-        if HUB_ID: await change_datastore(session, json.dumps([place_id for place_id, universe_id in queue[:10]])) #await asyncio.gather(*[post_message(session, place_id), change_datastore(session, place_id)])
+        if HUB_ID: await change_datastore(json.dumps([place_id for place_id, universe_id in queue[:10]])) #await asyncio.gather(*[post_message(place_id), change_datastore(place_id)])
 
         #game = discord.Game(name=universe.get("name"))
         #await client.change_presence(status=discord.Status.idle, activity=game)
@@ -280,6 +350,13 @@ async def farm_visits():
         except Exception as e: traceback.print_exception(type(e), e, e.__traceback__, file=sys.stderr)
         await asyncio.sleep(DELAY)
 
+async def fetch_emojis():
+    global emojis
+
+    emotes = await client.fetch_emojis()
+    emojis = {emote.name: f"<:{emote.name}:{emote.id}>" for emote in emotes}
+    print(emojis)
+
 def get_creds():
     """Returns the credentials from the service account key file."""
     scopes = [
@@ -290,14 +367,12 @@ def get_creds():
 
 @client.event
 async def on_ready():
-    global session
     global agc
-
-    session = aiohttp.ClientSession(cookies={".ROBLOSECURITY": ROBLOSECURITY})
 
     if not checking_visits.is_running(): checking_visits.start() 
 
     asyncio.create_task(farm_visits())
+    asyncio.create_task(fetch_emojis())
 
     agcm = AsyncioGspreadClientManager(get_creds)
     agc = await agcm.authorize()
@@ -333,7 +408,7 @@ def whitelist_check(ctx: discord.ApplicationContext):
     return False
 
 def create_spreadsheet_container(header, data, size: int = 10) -> list[ui.Container]:
-    if not data: return [ui.Container(ui.TextDisplay(content="No data provided."))]
+    if not data: return None #[ui.Container(ui.TextDisplay(content="No data provided."))]
 
     pages = []
     chunks = [data[i:i + size] for i in range(0, len(data), size)]
@@ -369,17 +444,43 @@ def create_spreadsheet_container(header, data, size: int = 10) -> list[ui.Contai
 
     return pages
 
+class CustomGroup:
+    def __init__(self, label: str, description: str = "", emoji: discord.Emoji = None, pages: list[list[ui.Container]] = [], default: bool = False):
+        self.label = label
+        self.description = description
+        self.emoji = emoji
+        self.pages = pages
+        self.default = default
+        self._selected = False
+
 class CustomPages(ui.View):
-    def __init__(self, pages: list[ui.Container], timeout: int = 200, user: discord.User = None):
+    def __init__(self, pages: list[ui.Container] = None, groups: list[CustomGroup] = None, timeout: int = 200, user: discord.User = None, interaction_callback = None, inf_pages: bool = False):
         super().__init__(timeout=timeout, disable_on_timeout=True)
         self.pages = pages
-
-        self.len = len(self.pages)
         self.page = 0
+        self.group = 0
+
+        self.groups = groups
+
+        if groups:
+            selected = False
+            
+            for i, group in enumerate(groups):
+                if group.default: self.pages = group.pages; self.group = i; self.groups[i]._selected = True; selected = True; break
+
+            if not selected: self.pages = groups[0].pages; self.groups[0]._selected = True
+
         self.user = user
         self.disabled = False
 
+        self.inf_pages = inf_pages
+        self.interaction_callback = interaction_callback
+
         self.update_view()
+
+    @property
+    def len(self):
+        return len(self.pages)
 
     async def on_timeout(self):
         self.disabled = True
@@ -388,26 +489,38 @@ class CustomPages(ui.View):
     def create_buttons(self):
         container = ui.Container()
 
-        buttons = [
-            ("⏪", self.first, "", self.page == 0),
-            ("◀", self.previous, "", self.page == 0),
-            ("", self.indicator, f"{self.page+1}/{self.len}", self.len == 1),
-            ("▶", self.next, "", self.page == self.len-1),
-            ("⏩", self.last, "", self.page == self.len-1),
-        ]
+        if self.groups:
+            selector = self.PageSelect(
+                discord.ComponentType.string_select, 
+                placeholder="Select your page group",
+                required=True, 
+                options=[discord.SelectOption(label=group.label, value=str(i), description=group.description, emoji=group.emoji, default=group._selected) for i, group in enumerate(self.groups)],
+            )
+            container.add_item(selector)
 
-        for emoji, func, label, disabled in buttons:
-            button = ui.Button(emoji=emoji if emoji else None, label=label, disabled=disabled)
-            button.callback = func
-            container.add_item(button)
+        if self.len != 1 or self.inf_pages:
+            buttons = [
+                ("⏪", self.first, "", self.page == 0),
+                ("◀", self.previous, "", self.page == 0),
+                ("", self.indicator, f"{self.page+1}/{self.len}{'' if not self.inf_pages else '..'}", self.len == 1),
+                ("▶", self.next, "", self.page == self.len-1 and not self.inf_pages),
+                ("⏩", self.last, "", self.page == self.len-1 and not self.inf_pages),
+            ]
 
-        return container
+            for emoji, func, label, disabled in buttons:
+                button = ui.Button(emoji=emoji if emoji else None, label=label, disabled=disabled)
+                button.callback = func
+                container.add_item(button)
+
+        return container if container.items else None
 
     def update_view(self):
         self.clear_items()
 
         self.add_item(self.pages[self.page])
-        if self.len != 1: self.add_item(self.create_buttons())
+
+        menu = self.create_buttons()
+        if menu: self.add_item(menu)
 
         if self.disabled:
             links = []
@@ -423,6 +536,9 @@ class CustomPages(ui.View):
 
         if ctx: await ctx.edit(view=self)
         elif self.parent and self.parent.message: await self.parent.edit(view=self)
+        elif self.message: 
+            try: await self.message.edit(view=self)
+            except: pass
             
     async def interaction_check(self, ctx: discord.Interaction):
         if self.user and ctx.user.id != self.user.id:
@@ -432,10 +548,12 @@ class CustomPages(ui.View):
 
     async def first(self, ctx: discord.Interaction):
         self.page = 0
+        if self.interaction_callback: await self.interaction_callback(self, ctx, "first")
         await self.update_page(ctx)
 
     async def previous(self, ctx: discord.Interaction):
         self.page -= 1
+        if self.interaction_callback: await self.interaction_callback(self, ctx, "previous")
         await self.update_page(ctx)
 
     async def indicator(self, ctx: discord.Interaction):
@@ -444,9 +562,11 @@ class CustomPages(ui.View):
 
     async def next(self, ctx: discord.Interaction):
         self.page += 1
+        if self.interaction_callback: await self.interaction_callback(self, ctx, "next")
         await self.update_page(ctx)
 
     async def last(self, ctx: discord.Interaction):
+        if self.interaction_callback: await self.interaction_callback(self, ctx, "last")
         self.page = self.len-1
         await self.update_page(ctx)
 
@@ -471,6 +591,26 @@ class CustomPages(ui.View):
                 return await ctx.response.defer(invisible=True)
 
             self.view.page = page-1
+            if self.interaction_callback: await self.interaction_callback(self, ctx, "modal")
+            await self.view.update_page(ctx)
+
+    class PageSelect(ui.Select):
+        def __init__(self, *args, **kwargs):
+            super().__init__(
+                *args,
+                **kwargs,
+            )
+            #self.view = view
+        
+        async def callback(self, ctx: discord.Interaction):
+            value = int(self.values[0])
+
+            self.view.group = value
+            self.view.page = 0
+            self.view.pages = self.view.groups[value].pages
+
+            for i, select in enumerate(self.view.groups): self.view.groups[i]._selected = i == value
+            if self.view.interaction_callback: await self.view.interaction_callback(self.view, ctx, "select")
             await self.view.update_page(ctx)
 
 async def get_place_ids(content: str):
@@ -480,7 +620,7 @@ async def get_place_ids(content: str):
 
     for url in urls:
         if "roblox.com/share?code=" in url:
-            place_id = await resolve_share(session, url)
+            place_id = await resolve_share(url)
             place_ids.append(str(place_id))
         elif "roblox.com/games/" in url:
             match = re.search(r'\d+', url)
@@ -564,13 +704,13 @@ async def list_queue(ctx: discord.ApplicationContext):
     data = []
     visits_required = 0
 
-    botnet = await get_latest(session)
+    botnet = await get_latest()
     if queue:
         chunks = [queue[i:i + 50] for i in range(0, len(queue), 50)]
 
         for i_c, chunk in enumerate(chunks):
             universe_ids = [game[1] for game in chunk]
-            universes = await get_universes(session, universe_ids)
+            universes = await get_universes(universe_ids)
             
             data = []
             visits_required = 0
@@ -602,13 +742,15 @@ async def add_queue_wrap(ctx: discord.ApplicationContext = None, message: discor
         data = []
 
         for chunk in chunks:
-            places = await get_places(session, chunk)
+            places = await get_places(chunk)
 
             universe_ids = [place.get("universeId") for place in places]
 
-            universes = await get_universes(session, universe_ids)
-            playabilities = await get_universe_playability(session, universe_ids)
-            maturities = await asyncio.gather(*[get_universe_maturity(session, universe_id) for universe_id in universe_ids])
+            universes, playabilities, maturities = await asyncio.gather(*[
+                get_universes(universe_ids),
+                get_universe_playability(universe_ids),
+                asyncio.gather(*[get_universe_maturity(universe_id) for universe_id in universe_ids])
+            ])
 
             for i in range(len(places)):
                 place = places[i]
@@ -670,6 +812,70 @@ async def add_queue_wrap(ctx: discord.ApplicationContext = None, message: discor
         if ctx: return await ctx.respond("no games found 😔", ephemeral=True, delete_after=3)
         else: return
 
+sort_bies = {"lastJoined": "Last joined", "joins": "Joins"}
+sort_keys = [key for key, value in sort_bies.items()]
+@client.slash_command()
+@discord.option(name="sort_by", input_type=str, choices=[discord.OptionChoice(name=value, value=key) for key, value in sort_bies.items()], default="lastJoined")
+async def get_contibutors(ctx: discord.ApplicationContext, sort_by: str):
+    await ctx.defer()
+    cursors = {key: "" for key, value in sort_bies.items()}
+
+    groups = [
+        CustomGroup("Last Joined", description="Sorts leaderboard by last joined", emoji="⏳", pages=[], default=sort_by=="lastJoined"),
+        CustomGroup("Joins", description="Sorts leaderboard by joins", emoji="▶", pages=[], default=sort_by=="joins")
+    ]
+
+    async def get_pages(sort_by):
+        data = await get_datastore(datastore=sort_by, page_token=cursors[sort_by], max_page_size=5)
+        print(data)
+        cursors[sort_by] = data.get("nextPageToken")
+        print(cursors)
+        entries = data.get("entries")
+        if not entries: return None, await ctx.respond("no data provided 😔", ephemeral=True, delete_after=3)
+
+        user_ids = [entry.get("id") for entry in entries]
+        users = await get_users(user_ids)
+        print(users)
+
+        header = ["`🔳", "#", "User", sort_bies[sort_by], "Link   `"]
+        lines = []
+
+        for i, (entry, user) in enumerate(zip(entries, users), 1):
+            lines.append(["`🔲", f"{i}", f'{user.get("displayName")}{" ☑" if user.get("hasVerifiedBadge") else ""} (@{user.get("name")})', f'{entry.get("value")}`' if sort_by == "joins" else f'`<t:{entry.get("value")}:R>', f'https://www.roblox.com/users/{entry.get("id")}/profile'])
+        
+        pages = create_spreadsheet_container(header, lines)
+        return pages, None
+
+    async def interaction_callback(view: CustomPages, ctx: discord.Interaction, action: str):
+        #print(emojis['loading'])
+        #inter = await ctx.respond(content=f"{emojis['loading']} loading...")
+
+        if action in ["select", "next", "last"]:
+            group_id = view.group
+            sort_by = sort_keys[group_id]
+
+            pages = []
+            while pages != None:
+                print(action)
+                pages, _ = await get_pages(sort_by)
+                view.groups[group_id].pages.extend(pages)
+                if not action == "last": break
+
+            print(cursors)
+            print(sort_by)
+            if cursors[sort_by] == None: view.inf_pages = False
+
+        #await inter.delete_original_response()
+
+    pages, _ = await get_pages(sort_by)
+    groups[sort_keys.index(sort_by)].pages.extend(pages)
+    for group in groups:
+        print(group.pages)
+
+    paginator = CustomPages(groups=groups, interaction_callback=interaction_callback, user=ctx.author, inf_pages=cursors[sort_by] != None)
+    print(paginator)
+    return await ctx.respond(view=paginator)
+
 @client.message_command(name="add to queue")
 async def add_queue(ctx: discord.ApplicationContext, message: discord.Message):
     return await add_queue_wrap(ctx=ctx, message=message)
@@ -685,15 +891,15 @@ async def place_info(ctx: discord.ApplicationContext, message: discord.Message):
     
     chunks = [place_ids[i:i + 50] for i in range(0, len(place_ids), 50)]
     for chunk in chunks:
-        places = await get_places(session, chunk)
+        places = await get_places(chunk)
         universe_ids = [place.get("universeId") for place in places]
 
-        universes = await get_universes(session, universe_ids)
+        universes = await get_universes(universe_ids)
 
         async def universe_badges(universe):
             universe_id = universe.get("id")
 
-            badges = await get_badges(session, universe_id)
+            badges = await get_badges(universe_id)
             legacies = get_legacies(badges)
             
             return [f"`{universe.get('name')}", universe.get("visits"), f"{len(legacies)}`", f"https://www.roblox.com/games/{universe.get('rootPlaceId')}"]
@@ -716,21 +922,19 @@ async def on_message(message: discord.Message):
         place_ids = await get_place_ids(message.content)
         if not place_ids: return
 
-        places = await get_places(session, place_ids)
+        places = await get_places(place_ids)
 
         universe_ids = [place.get("universeId") for place in places]
         
-        universes: list[dict] = await get_universes(session, universe_ids)
-        maturities, badges = await asyncio.gather(*[
-            asyncio.gather(*[get_universe_maturity(session, universe_id) for universe_id in universe_ids]), 
-            asyncio.gather(*[get_badges(session, universe_id) for universe_id in universe_ids])
+        universes, maturities, badges = await asyncio.gather(*[
+            get_universes(universe_ids),
+            asyncio.gather(*[get_universe_maturity(universe_id) for universe_id in universe_ids]), 
+            asyncio.gather(*[get_badges(universe_id) for universe_id in universe_ids])
         ])
-        #maturities = await asyncio.gather(*[get_universe_maturity(session, universe_id) for universe_id in universe_ids])
-        #badges = await asyncio.gather(*[get_badges(session, universe_id) for universe_id in universe_ids])
 
         spreadsheet = await agc.open_by_key(SPREADSHEET_ID)
-        wip_sheet = await spreadsheet.get_worksheet(0)
-        done_sheet = await spreadsheet.get_worksheet(1)
+        wip_sheet = await spreadsheet.get_worksheet(5)
+        done_sheet = await spreadsheet.get_worksheet(6)
 
         urls = [f"https://www.roblox.com/games/{place_id}" for place_id in place_ids]
         wips = await asyncio.gather(*[wip_sheet.find(url) for url in urls])
@@ -749,6 +953,7 @@ async def on_message(message: discord.Message):
             url = urls[i] #f"https://www.roblox.com/games/{place_id}"
 
             name = universe.get("name")
+            place = places[i]
             visits = universe.get("visits")
             maturity = maturities[i]
             legacies = len(get_legacies(badges[i]))
@@ -756,25 +961,28 @@ async def on_message(message: discord.Message):
             cell = wips[i]
             isdonebefore = dones[i]
 
+            if cell and not place.get("isPlayable"): data.append(["`⚠", name, "private`", url]); ignore.append(place_id); continue
             if visits < 1000 and maturity.get("contentMaturity") == "unrated": data.append(["`❌", name, "<1k visits`", url]); continue
             if isdonebefore and not cell: data.append(["`❌", name, "in table`", url]); ignore.append(place_id); continue
             if legacies == 0: data.append(["`❌", name, "no legacies`", url]); ignore.append(place_id); continue
+            if cell and isdonebefore: data.append(["`⚠", name, "duplicate`", url]); dups.append(url); continue
             if not cell: data.append(["`⚠", name, "not in table`", url]); ignore.append(place_id); deleting = False; continue
-
-            if cell and isdonebefore: data.append(["`⚠", name, "duplicate`", url]); dups.append(cell); continue
             
-            cells.append(cell)
+            cells.append(url)
             data.append(["`✅", name, "`", url])
         
-        async def move_cell(cell: gspread.Cell):
-            row_index = cell.row
+        async def move_cell(url: gspread.Cell, delete: bool = False):
+            row = await wip_sheet.find(url)
+            if not row: print(f"{url} not in wip"); return
 
-            row_data = await wip_sheet.row_values(row_index)
-            await done_sheet.append_row(row_data)
-            await wip_sheet.delete_rows(row_index)
+            if not delete:
+                row_data = await wip_sheet.row_values(row.row)
+                print(row_data)
+                await done_sheet.append_row(row_data, value_input_option='USER_ENTERED')
+            await wip_sheet.delete_rows(row.row)
 
-        for cell in cells: await move_cell(cell)
-        for dupe in dups: await wip_sheet.delete_rows(dupe.row)
+        for url in cells: await move_cell(url)
+        for url in dups: await move_cell(url, delete=True)
 
         #await asyncio.gather(*[move_cell(cell) for cell in cells])
         #await asyncio.gather(*[wip_sheet.delete_rows(dupe.row) for dupe in dups])
@@ -783,7 +991,10 @@ async def on_message(message: discord.Message):
         
         paginator = CustomPages(pages)
         
-        await message.reply(view=paginator, delete_after=20 if deleting else None)
-        await message.delete(reason=f"moved to spreadsheet")
+        try:
+            await message.reply(view=paginator, delete_after=20 if deleting else None)
+            await message.delete(reason=f"moved to spreadsheet")
+        except Exception as e:
+            print(f"{e}")
 
-client.run(BOT_TOKEN)
+if __name__ == "__main__": client.run(BOT_TOKEN)
