@@ -74,3 +74,7 @@ WIP_TAG = 0
 ACCOUNT_JSON = "credentials.json"
 # Spreadsheet ID
 SPREADSHEET_ID = ""
+# WIP Worksheet Index
+WIP_INDEX = 0
+# Done Worksheet Index
+DONE_INDEX = 1
