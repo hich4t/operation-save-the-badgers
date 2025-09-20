@@ -5,3 +5,4 @@ psutil
 gspread-asyncio 
 gspread 
 google-auth
+rich
