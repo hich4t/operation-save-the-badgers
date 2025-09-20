@@ -26,6 +26,7 @@ from cfg import *
 #  (_")("_)    (__)  (__)  (__)(__)_)       (__)    (__) (__)(__)  (__)(__) (__)(__) (__) 
 
 cookies = {".ROBLOSECURITY": ROBLOSECURITY}
+
 if not os.path.exists("queue.csv"): 
     with open("queue.csv", "w") as file:
         file.write("\n")
@@ -64,37 +65,13 @@ async def write_requesters():
 #   //   \\_  <<   >>   \\// (__) )(   <<   >>  )(  (__)_// \\_  )(  (__) 
 #  (__)  (__)(__) (__) (_(__)    (__) (__) (__)(__)    (__) (__)(__)      
 
-async def get_universes(session: aiohttp.ClientSession, universes: list):
-    request = await session.get(f"https://games.roblox.com/v1/games?universeIds={','.join(map(str, universes))}")
-    request.raise_for_status()
-    response = await request.json()
-    return response.get("data")
+async def get_universes(universes: list):
+    async with aiohttp.ClientSession(cookies=cookies) as session:
+        request = await session.get(f"https://games.roblox.com/v1/games?universeIds={','.join(map(str, universes))}")
+        request.raise_for_status()
+        response = await request.json()
+        return response.get("data")
 
-async def get_universe_playability(session: aiohttp.ClientSession, universes: list):
-    request = await session.get(f"https://games.roblox.com/v1/games/multiget-playability-status?universeIds={','.join(map(str, universes))}")
-    request.raise_for_status()
-    response = await request.json()
-    return response
-
-async def get_universe_maturity(session: aiohttp.ClientSession, universe_id):
-    request = await session.post(
-        "https://apis.roblox.com/experience-guidelines-api/experience-guidelines/get-age-recommendation",
-        json={"universeId": str(universe_id)}    
-    )
-    request.raise_for_status()
-    response = await request.json()
-    return response.get("ageRecommendationDetails").get("summary").get("ageRecommendation")
-
-async def get_places(session: aiohttp.ClientSession, places: list):
-    params = "&".join([f"placeIds={place}" for place in places])
-    request = await session.get(f"https://games.roblox.com/v1/games/multiget-place-details?{params}")
-    request.raise_for_status()
-    response = await request.json()
-    return response
-
-async def get_badges(session: aiohttp.ClientSession, universe_id):
-    badges = []
-    cursor = ""
 async def get_universe_playability(universes: list):
     async with aiohttp.ClientSession(cookies=cookies) as session:
         request = await session.get(f"https://games.roblox.com/v1/games/multiget-playability-status?universeIds={','.join(map(str, universes))}")
@@ -102,13 +79,6 @@ async def get_universe_playability(universes: list):
         response = await request.json()
         return response
 
-    while cursor != None:
-        request = await session.get(
-            f"https://badges.roblox.com/v1/universes/{universe_id}/badges",
-            params={
-                "limit": 100,
-                "cursor": cursor
-            }
 async def get_universe_maturity(universe_id):
     async with aiohttp.ClientSession(cookies=cookies) as session:
         request = await session.post(
