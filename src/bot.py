@@ -171,6 +171,8 @@ async def get_latest(page_token: str = ""):
     current = time.time()
     active = 1 if FARMING else 0
 
+    if not datastore.get("entries"): return active
+
     for entry in datastore.get("entries"):
         user_time = int(entry.get("value"))
         limit = current - ACTIVE_THRESHOLD
@@ -220,7 +222,7 @@ async def checking_visits():
     try:
         if len(queue) < 10 and agc:
             spreadsheet = await agc.open_by_key(SPREADSHEET_ID)
-            wip_sheet = await spreadsheet.get_worksheet(5)
+            wip_sheet = await spreadsheet.get_worksheet(WIP_INDEX)
             rows = await wip_sheet.get(f'A2:E{max(2, 12-len(queue))}')
 
             for row in rows:
@@ -690,7 +692,7 @@ async def list_queue(ctx: discord.ApplicationContext):
                 
                 visits_required += max(0, 1000 - universe.get("visits"))
 
-    pages = create_spreadsheet_container(header, data)
+    pages = create_spreadsheet_container(header, data) or [ui.Container(ui.TextDisplay(content="No data provided."))]
     for page in pages:
         page.add_text(f"\ngames in queue: `{len(queue)}`\nvisits required: `{visits_required}`\ncurrent online: `{botnet}`")
 
@@ -762,7 +764,7 @@ async def add_queue_wrap(ctx: discord.ApplicationContext = None, message: discor
         await write_queue()
         await write_requesters()
 
-        pages = create_spreadsheet_container(header, data)
+        pages = create_spreadsheet_container(header, data) or [ui.Container(ui.TextDisplay(content="No data provided."))]
 
         paginator = CustomPages(pages=pages, user=ctx.author if ctx else message.author)
 
@@ -813,7 +815,7 @@ async def get_contibutors(ctx: discord.ApplicationContext, sort_by: str):
         for i, (entry, user) in enumerate(zip(entries, users), 1):
             lines.append(["`🔲", f"{i}", f'{user.get("displayName")}{" ☑" if user.get("hasVerifiedBadge") else ""} (@{user.get("name")})', f'{entry.get("value")}`' if sort_by == "joins" else f'`<t:{entry.get("value")}:R>', f'https://www.roblox.com/users/{entry.get("id")}/profile'])
         
-        pages = create_spreadsheet_container(header, lines)
+        pages = create_spreadsheet_container(header, lines) or [ui.Container(ui.TextDisplay(content="No data provided."))]
         return pages, None
 
     async def interaction_callback(view: CustomPages, ctx: discord.Interaction, action: str):
@@ -877,7 +879,7 @@ async def place_info(ctx: discord.ApplicationContext, message: discord.Message):
         results = await asyncio.gather(*[universe_badges(universe) for universe in universes])
         data.extend(results)
 
-    pages = create_spreadsheet_container(header, data)
+    pages = create_spreadsheet_container(header, data) or [ui.Container(ui.TextDisplay(content="No data provided."))]
 
     paginator = CustomPages(pages=pages, user=ctx.author)
     return await ctx.respond(view=paginator)
@@ -903,8 +905,8 @@ async def on_message(message: discord.Message):
         ])
 
         spreadsheet = await agc.open_by_key(SPREADSHEET_ID)
-        wip_sheet = await spreadsheet.get_worksheet(5)
-        done_sheet = await spreadsheet.get_worksheet(6)
+        wip_sheet = await spreadsheet.get_worksheet(WIP_INDEX)
+        done_sheet = await spreadsheet.get_worksheet(DONE_INDEX)
 
         urls = [f"https://www.roblox.com/games/{place_id}" for place_id in place_ids]
         wips = await asyncio.gather(*[wip_sheet.find(url) for url in urls])
@@ -957,7 +959,7 @@ async def on_message(message: discord.Message):
         #await asyncio.gather(*[move_cell(cell) for cell in cells])
         #await asyncio.gather(*[wip_sheet.delete_rows(dupe.row) for dupe in dups])
 
-        pages = create_spreadsheet_container(header, data)
+        pages = create_spreadsheet_container(header, data) or [ui.Container(ui.TextDisplay(content="No data provided."))]
         
         paginator = CustomPages(pages)
         
